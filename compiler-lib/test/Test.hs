@@ -1,4 +1,6 @@
 module Main (main) where
 
+import qualified Transform.ClosureConvertTest
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented."
+main = Transform.ClosureConvertTest.tests
