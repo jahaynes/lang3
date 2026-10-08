@@ -1,0 +1,27 @@
+cabal-version:      3.4
+name:               compiler-lib
+version:            0.1.0.0
+author:             John Haynes
+maintainer:         john.andrew.haynes@gmail.com
+build-type:         Simple
+
+common common
+    ghc-options: -Wall -O2
+
+library
+    import:           common
+    exposed-modules:  Core.Expression
+    build-depends:
+        base
+    hs-source-dirs:   src
+    default-language: Haskell2010
+
+test-suite compiler-lib-test
+    import:           common
+    default-language: Haskell2010
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Test.hs
+    build-depends:
+        base,
+        compiler-lib
