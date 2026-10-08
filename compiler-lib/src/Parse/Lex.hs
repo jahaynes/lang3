@@ -1,0 +1,219 @@
+module Parse.Lex ( runLexer
+                 ) where
+
+import Parse.Parser
+import Parse.Token
+
+import           Data.ByteString       (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as C8
+import           Data.Char                   (isAlphaNum, isDigit, isLower, isSpace)
+import           Data.Vector           (Vector)
+import qualified Data.Vector as V
+
+data LexState =
+    LexState { ls_source :: !ByteString
+             , ls_pos    :: !Int
+             } deriving Show
+
+runLexer :: ByteString -> Either ByteString (Vector Int, Vector Token)
+runLexer = runLexer' lexer
+
+runLexer' :: Parser LexState a -> ByteString -> Either ByteString a
+runLexer' p s =
+    let ps = LexState { ls_source = s
+                      , ls_pos    = 0
+                      }
+    in
+    case runParser p ps of
+        Left l -> Left l
+        Right (s', x) | ls_pos s' == BS.length (ls_source s') -> Right x
+                      | otherwise                             -> Left $ "Leftover input: " <> C8.pack (show s')
+
+lexer :: Parser LexState (Vector Int, Vector Token)
+lexer = do
+    (positions, tokens) <- V.unzip <$> many nextPositionedToken
+    pDropWhile isSpace
+    pure (positions, disambiguateNegation tokens)
+
+parseToken :: Parser LexState Token
+parseToken = litBool
+         <|> litInt
+         <|> (TLitString <$> litString)
+         <|> variable
+
+    where
+    litBool = TLitBool <$> boolean
+
+    litInt :: Parser LexState Token
+    litInt = TLitInt <$> integer -- TODO not followed by ., etc.
+
+    variable :: Parser LexState Token
+    variable = TLowerStart <$> lowerStart
+
+    {- keyword
+         <|> operator
+         <|> litBool
+         <|> litInt
+         <|> (TLitString <$> litString)
+         <|> variable
+         <|> constructor -}
+
+boolean :: Parser LexState Bool
+boolean = positioned True  (string "True"  <* notFollowedBy isAlphaNum)
+      <|> positioned False (string "False" <* notFollowedBy isAlphaNum)
+
+nextPositionedToken :: Parser LexState (Int, Token)
+nextPositionedToken = do
+    pDropWhile isSpace
+    pos <- getPosition
+    t   <- parseToken
+    pure (pos, t)
+
+getPosition :: Parser LexState Int
+getPosition = Parser $ \ps -> Right (ps, ls_pos ps)
+
+disambiguateNegation :: Vector Token -> Vector Token
+disambiguateNegation = disam . pairs . V.cons TAmbiguous
+
+    where
+    pairs :: Vector a -> Vector (a, a)
+    pairs xs = V.zip (V.init xs) (V.tail xs)
+
+    disam :: Vector (Token, Token) -> Vector Token
+    disam = V.map g
+        where
+        g (prev, TMinus) = f prev
+        g (   _,      t) = t
+
+        f TIn     = TNegate
+        f TIf     = TNegate
+        f TThen   = TNegate
+        f TElse   = TNegate
+        f TDot    = TNegate
+        f TLParen = TNegate
+        f TEqEq   = TNegate
+        f TGt     = TNegate
+        f TGtEq   = TNegate
+        f TLt     = TNegate
+        f TLtEq   = TNegate
+        f TEq     = TNegate
+        f TPlus   = TNegate
+        f TMinus  = TNegate
+        f TMul    = TNegate
+        f TDiv    = TNegate
+        f TNegate = TNegate
+        f TAnd    = TNegate
+        f TOr     = TNegate
+
+        f TRParen         = TMinus
+        f (TLitInt _)     = TMinus
+        f (TLowerStart _) = TMinus
+
+        f TLet            = TAmbiguous
+        f TLambda         = TAmbiguous
+        f (TLitBool _)    = TAmbiguous
+        f (TLitString _)  = TAmbiguous
+        f (TUpperStart _) = TAmbiguous
+        f TPipe           = TAmbiguous
+        f TColon          = TAmbiguous
+        f TArr            = TAmbiguous
+        f TAmbiguous      = TAmbiguous
+        f TPlusPlus       = TAmbiguous
+        f TDollar         = TAmbiguous -- check
+        f TCase           = TAmbiguous -- check
+        f TOf             = TAmbiguous -- check
+        f TErr            = TAmbiguous -- check
+
+pDropWhile :: (Char -> Bool) -> Parser LexState ()
+pDropWhile p = Parser $ \ls -> f ls (ls_pos ls)
+    where
+    f ls pos
+        | pos >= BS.length (ls_source ls) = Right (ls {ls_pos = pos}, ())
+        | p (C8.index (ls_source ls) pos) = f ls (pos + 1)
+        | otherwise                       = Right (ls {ls_pos = pos}, ())
+
+notFollowedBy :: (Char -> Bool) -> Parser LexState ()
+notFollowedBy p = Parser $ \ls ->
+    let source = ls_source ls
+        pos    = ls_pos ls
+    in
+    if pos >= BS.length source
+        then pure (ls, ())
+        else if p (C8.index source pos)
+                 then Left "was followed by predicate"
+                 else pure (ls, ())
+
+string :: ByteString -> Parser LexState ()
+string bs = Parser $ \ps ->
+    let len  = BS.length bs
+        pos' = ls_pos ps + len
+        some = BS.take len . BS.drop (ls_pos ps) . ls_source $ ps
+    in
+    if pos' > BS.length (ls_source ps)
+        then Left "Insufficient input"
+        else if bs == some
+                 then Right (ps { ls_pos = pos' }, ())
+                 else Left "String mismatch"
+
+positioned :: Functor f => b -> f a -> f b
+positioned t s = t <$ s
+
+alphaNumStartWith :: (Char -> Bool) -> Parser LexState ByteString
+alphaNumStartWith p = Parser $ \ls ->
+    let some = C8.takeWhile isAlphaNum . BS.drop (ls_pos ls) $ ls_source ls
+        len  = C8.length some
+    in if len == 0
+           then Left "Expected alphaNum for alphaNumStartWith"
+           else
+               if p (C8.head some)
+                   then Right (ls { ls_pos = ls_pos ls + len }, some)
+                   else Left "Unexpected alphaNumStartWith"
+
+litString :: Parser LexState ByteString
+litString = Parser f
+    where
+    f (LexState source pos)
+
+        | pos >= BS.length source =
+            Left "Out of litString"
+
+        | BS.index source pos /= 34 =
+            Left "Doesn't start with \""
+
+        | otherwise =
+            case findEnd (pos + 1) (BS.length source) False of
+
+                Left l -> Left l
+
+                Right i -> let len = i - pos
+                           in
+                           Right ( LexState source (pos + len + 1)
+                                 , BS.take (len - 1) $ BS.drop (pos + 1) source )
+
+        where
+        findEnd :: Int -> Int -> Bool -> Either ByteString Int
+        findEnd i j esc
+            | i == j    = Left "Ran off the end"
+            | esc       = findEnd (i+1) j False
+            | otherwise =
+                case BS.index source i of
+                    92 -> findEnd (i+1) j True
+                    34 -> Right i
+                    _  -> findEnd (i+1) j False
+
+
+lowerStart :: Parser LexState ByteString
+lowerStart = alphaNumStartWith isLower
+
+integer :: Parser LexState Integer
+integer = read . C8.unpack <$> digits
+
+digits :: Parser LexState ByteString
+digits = Parser $ \ls ->
+    let ds = C8.takeWhile isDigit . C8.drop (ls_pos ls) $ ls_source ls
+        len = C8.length ds
+    in
+    if C8.null ds
+        then Left "Expected digits"
+        else Right (ls { ls_pos = ls_pos ls + len }, ds)

@@ -7,16 +7,24 @@ build-type:         Simple
 
 common common
     ghc-options: -Wall -O2
-    default-extensions: LambdaCase, QuasiQuotes
+    default-extensions: InstanceSigs, LambdaCase, OverloadedStrings, QuasiQuotes
     build-depends:
         base,
+        bytestring,
         containers,
-        transformers
+        transformers,
+        vector,
+        vector-builder
 
 library
     import:           common
     exposed-modules:  Core.Expression
                       Core.Module
+                      Parse.Expression
+                      Parse.Lex
+                      Parse.LexAndParse
+                      Parse.Parser
+                      Parse.Token
                       Transform.Class
                       Transform.ClosureConvert
     hs-source-dirs:   src

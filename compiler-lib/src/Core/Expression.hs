@@ -12,3 +12,4 @@ data Term t s
     = Var !t !s
     | LitInt !Int
     | LitBool !Bool
+    | LitString !s
