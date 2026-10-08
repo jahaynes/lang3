@@ -3,7 +3,7 @@ module Core.Expression ( Expr (..)
                        ) where
 
 data Expr t s
-    = Term !t !s
+    = Term !t !(Term t s)
     | App !t !(Expr t s) ![Expr t s]
     | Lam !t ![s] !(Expr t s)
     | Let !t !s !(Expr t s) !(Expr t s)
