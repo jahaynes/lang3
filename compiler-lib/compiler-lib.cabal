@@ -11,6 +11,7 @@ common common
 library
     import:           common
     exposed-modules:  Core.Expression
+                      Core.Module
     build-depends:
         base
     hs-source-dirs:   src
