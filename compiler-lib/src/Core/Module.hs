@@ -2,11 +2,9 @@ module Core.Module ( Fun (..)
                    , Module (..)
                    ) where
 
-import Core.Expression (Expr)
-
-data Module t s =
-    Module { getFunDefns :: ![Fun t s]
+data Module a s =
+    Module { getFunDefns :: ![Fun a s]
            }
 
-data Fun t s =
-    Fun !s !(Expr t s)
+data Fun a s =
+    Fun !s !a
