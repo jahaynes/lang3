@@ -2,9 +2,9 @@ module Transform.ClosureConvert ( CCExpr (..)
                                 , closureConvert
                                 ) where
 
-import Core.Expression (Expr (..))
+import Core.Expression (Expr (..), Term (..))
 import Core.Module     (Fun (..), Module (..))
-import Transform.Class (App (..))
+import Transform.Class
 
 import           Control.Monad.Trans.Reader (ReaderT, runReaderT)
 import           Data.Set                   (Set)
@@ -14,7 +14,9 @@ newtype Scope s
     = Scope (Set s)
 
 data CCExpr t s
-    = CCApp !t !(CCExpr t s) ![CCExpr t s]
+    = CCTerm !(Term t s)
+    | CCApp !t !(CCExpr t s) ![CCExpr t s]
+    | CCLet !t !s !(CCExpr t s) !(CCExpr t s)
 
 closureConvert :: (ClosureConvert a, Monad m, Ord s)
                => Module (Expr t s) s -> m (Module (a t s) s)
@@ -38,20 +40,28 @@ ccExpr expr =
 
     case expr of
         
-        Term{} ->
-            undefined
+        Term t ->
+            pure $ term t
 
-        App t f xs ->
-            app t <$> ccExpr f
-                  <*> traverse ccExpr xs
+        App ty f xs ->
+            app ty <$> ccExpr f
+                   <*> traverse ccExpr xs
 
         Lam{} ->
             undefined
 
-        Let{} ->
-            undefined
-    
-class (App a) => ClosureConvert a
+        Let ty a b c ->
+            lett ty a <$> ccExpr b
+                      <*> ccExpr c
+
+class (App a, CTerm a, Let a)
+    => ClosureConvert a
 
 instance App CCExpr where
     app = CCApp
+
+instance CTerm CCExpr where
+    term = CCTerm
+
+instance Let CCExpr where
+    lett = CCLet
