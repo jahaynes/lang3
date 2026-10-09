@@ -4,85 +4,74 @@ module Pretty.Expression ( buildExpr
 
 import Core.Expression (Expr (..), Term (..))
 
-import           Data.ByteString         (ByteString)
-import           Data.ByteString.Builder (Builder)
-import qualified Data.ByteString.Builder as B
-import qualified Data.ByteString.Char8   as C8
+import           Control.Monad.Trans.State.Strict (State, evalState, get, modify', put)
+import           Data.ByteString                  (ByteString)
+import qualified Data.ByteString                  as BS
+import           Data.ByteString.Builder          (Builder)
+import qualified Data.ByteString.Builder          as B
+import qualified Data.ByteString.Char8            as C8
 
 buildExpr :: (s -> ByteString) -> Expr t s -> Builder
-buildExpr toBS = block 0
+buildExpr toBS e = evalState (go e) 0
 
     where
-    block i = \case
-
-        Let _ f e1 e2 ->
-            let (binder, rhs) = letParts f e1
-            in "let " <> binder <> " =" <> blockTail (i + 4) rhs
-                <> newline i <> "in " <> block (i + 3) e2
-
-        Lam _ xs body ->
-            lamHead xs <> blockTail (i + 4) body
-
-        e -> inline Top e
-
-    blockTail i e
-        | isBlock e = newline i <> block i e
-        | otherwise = " " <> inline Top e
-
-    inline p = \case
+    go = \case
 
         Term t ->
-            parensIf (p > Top && isNegative t) (buildTerm toBS t)
+            str (termBS toBS t)
 
         App _ f xs ->
-            parensIf (p > FunPos) $
-                inline FunPos f <> foldMap (\x -> " " <> inline ArgPos x) xs
+            cat $ parensIf (needsParensFun f) (go f)
+                : map (\x -> cat [str " ", parensIf (needsParensArg x) (go x)]) xs
 
         Lam _ xs body ->
-            parensIf (p > Top) $
-                lamHead xs <> " " <> inline Top body
+            cat [str "\\", names xs, str " -> ", go body]
 
-        Let _ f e1 e2 ->
+        Let _ f e1 e2 -> do
             let (binder, rhs) = letParts f e1
-            in parensIf (p > Top) $
-                   "let " <> binder <> " = " <> inline Top rhs
-                       <> " in " <> inline Top e2
+            c <- get
+            cat [str "let ", binder, str " = ", go rhs, newline c, str "in ", go e2]
 
     letParts f (Lam _ xs body) = (names (f:xs), body)
-    letParts f e1              = (name toBS f, e1)
+    letParts f e1              = (str (toBS f), e1)
 
-    lamHead xs = "\\" <> names xs <> " ->"
-
-    names = mconcat . spaced . map (name toBS)
-
-    spaced []     = []
-    spaced (x:xs) = x : map (" " <>) xs
-
-    newline i = "\n" <> B.string7 (replicate i ' ')
+    names = str . C8.unwords . map toBS
 
 buildTerm :: (s -> ByteString) -> Term t s -> Builder
-buildTerm toBS = \case
-    Var _ v     -> name toBS v
-    LitInt n    -> B.intDec n
+buildTerm toBS = B.byteString . termBS toBS
+
+termBS :: (s -> ByteString) -> Term t s -> ByteString
+termBS toBS = \case
+    Var _ v     -> toBS v
+    LitInt n    -> C8.pack (show n)
     LitBool b   -> if b then "True" else "False"
-    LitString s -> B.string7 (show (C8.unpack (toBS s)))
+    LitString s -> C8.pack (show (C8.unpack (toBS s)))
 
-name :: (s -> ByteString) -> s -> Builder
-name toBS = B.byteString . toBS
+str :: ByteString -> State Int Builder
+str s = B.byteString s <$ modify' (+ BS.length s)
 
-parensIf :: Bool -> Builder -> Builder
-parensIf True  b = "(" <> b <> ")"
+newline :: Int -> State Int Builder
+newline c = ("\n" <> B.string7 (replicate c ' ')) <$ put c
+
+cat :: [State Int Builder] -> State Int Builder
+cat = fmap mconcat . sequence
+
+parensIf :: Bool -> State Int Builder -> State Int Builder
+parensIf True  b = cat [str "(", b, str ")"]
 parensIf False b = b
 
-data Prec = Top | FunPos | ArgPos
-    deriving (Eq, Ord)
+needsParensFun :: Expr t s -> Bool
+needsParensFun = \case
+    Term t -> isNegative t
+    App {} -> False
+    Lam {} -> True
+    Let {} -> True
+
+needsParensArg :: Expr t s -> Bool
+needsParensArg = \case
+    Term t -> isNegative t
+    _      -> True
 
 isNegative :: Term t s -> Bool
 isNegative (LitInt n) = n < 0
 isNegative _          = False
-
-isBlock :: Expr t s -> Bool
-isBlock = \case
-    Let {}       -> True
-    Lam _ _ body -> isBlock body
-    _            -> False
