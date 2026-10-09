@@ -18,4 +18,4 @@ class CTerm a where
     term :: Term t s -> a t s
 
 class Let a where
-    lett :: t -> s -> a t s -> a t s -> a t s
+    lett :: [(t, s, a t s)] -> a t s -> a t s

@@ -16,6 +16,7 @@ data Binding
     = Global
     | Lifted
     | Local
+        deriving (Eq, Show)
 
 newtype Scope s
     = Scope (Map s Binding)
@@ -24,7 +25,7 @@ data CCExpr t s
     = CCTerm !(Term t s)
     | CCApp !t !(CCExpr t s) ![CCExpr t s]
     | CCClosure !t !(Set s) ![s] !(CCExpr t s)
-    | CCLet !t !s !(CCExpr t s) !(CCExpr t s)
+    | CCLet ![(t, s, CCExpr t s)] !(CCExpr t s)
         deriving Show
 
 closureConvert :: (ClosureConvert a, Monad m, Ord s)
@@ -57,39 +58,34 @@ ccExpr expr =
                    <*> traverse ccExpr xs
 
         Lam ty ps b -> do
-            Scope scope <- ask
-            let isLocal v = case M.lookup v scope of
-                                Just Local -> True
-                                _          -> False
-                env = S.filter isLocal (freeVars b \\ S.fromList ps)
+            scope <- ask
+            let env = captures scope (freeVars expr)
             closure ty env ps <$> binding Local ps (ccExpr b)
 
-        -- The whole chain of let-bound lambdas is in scope in each of them,
-        -- and they will all be lifted to toplevel, so are never captured
-        Let ty a b@Lam{} c ->
-            binding Lifted (map fst . fst $ lamGroup expr) $
-                lett ty a <$> ccExpr b
-                          <*> ccExpr c
-
-        Let ty a b c ->
-            binding Local [a] $
-                lett ty a <$> ccExpr b
-                          <*> ccExpr c
+        -- A group of lambdas which capture no locals can be lifted to toplevel,
+        -- so references to them are never captured. Anything else is a local value.
+        Let bs body -> do
+            scope <- ask
+            let names   = [n | (_, n, _) <- bs]
+                rhsFree = S.unions [freeVars e | (_, _, e) <- bs] \\ S.fromList names
+                bd | all (\(_, _, e) -> isLam e) bs
+                   , S.null (captures scope rhsFree) = Lifted
+                   | otherwise                       = Local
+            binding bd names $
+                lett <$> traverse (\(t, n, e) -> (\e' -> (t, n, e')) <$> ccExpr e) bs
+                     <*> ccExpr body
 
 binding :: (Monad m, Ord s)
         => Binding -> [s] -> ReaderT (Scope s) m r -> ReaderT (Scope s) m r
 binding bd ns = local (\(Scope scope) -> Scope (M.fromList [(n, bd) | n <- ns] <> scope))
 
--- Split off a chain of consecutive let-bound lambdas, as a mutually recursive group
-lamGroup :: Expr t s -> ([(s, Expr t s)], Expr t s)
-lamGroup = \case
+-- The free variables which must be stored in a closure's environment
+captures :: Ord s => Scope s -> Set s -> Set s
+captures (Scope scope) = S.filter (\v -> M.lookup v scope == Just Local)
 
-    Let _ a b@Lam{} c ->
-        let (group, body) = lamGroup c
-        in ((a, b) : group, body)
-
-    e ->
-        ([], e)
+isLam :: Expr t s -> Bool
+isLam Lam{} = True
+isLam _     = False
 
 freeVars :: Ord s => Expr t s -> Set s
 freeVars = \case
@@ -106,13 +102,9 @@ freeVars = \case
     Lam _ ps b ->
         freeVars b \\ S.fromList ps
 
-    e@(Let _ _ Lam{} _) ->
-        let (group, body) = lamGroup e
-        in S.unions (freeVars body : map (freeVars . snd) group)
-               \\ S.fromList (map fst group)
-
-    Let _ a b c ->
-        S.delete a (freeVars b <> freeVars c)
+    Let bs body ->
+        S.unions (freeVars body : [freeVars e | (_, _, e) <- bs])
+            \\ S.fromList [n | (_, n, _) <- bs]
 
 class (App a, Closure a, CTerm a, Let a)
     => ClosureConvert a

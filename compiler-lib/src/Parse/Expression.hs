@@ -36,8 +36,8 @@ parseLet = do
     e1     <- token TEq  *> parseExpr
     e2     <- token TIn  *> parseExpr
     pure $ case xs of
-        [] -> Let () f                  e1  e2
-        _  -> Let () f (Lam () xs e1) e2
+        [] -> Let [((), f,           e1)] e2
+        _  -> Let [((), f, Lam () xs e1)] e2
 
 parseLambda :: Parser ParseState (Expr () ByteString)
 parseLambda = do

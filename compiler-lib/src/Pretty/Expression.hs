@@ -8,6 +8,7 @@ import           Data.ByteString         (ByteString)
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8   as C8
+import           Data.List               (intersperse)
 
 buildExpr :: (s -> ByteString) -> Expr t s -> Builder
 buildExpr toBS = block 0
@@ -15,10 +16,9 @@ buildExpr toBS = block 0
     where
     block i = \case
 
-        Let _ f e1 e2 ->
-            let (binder, rhs) = letParts f e1
-            in "let " <> binder <> " =" <> blockTail (i + 4) rhs
-                <> newline i <> "in " <> block (i + 3) e2
+        Let bs e ->
+            "let " <> sepBy (newline (i + 4)) (map (blockBinding (i + 4)) bs)
+                <> newline i <> "in " <> block (i + 3) e
 
         Lam _ xs body ->
             lamHead xs <> blockTail (i + 4) body
@@ -42,21 +42,25 @@ buildExpr toBS = block 0
             parensIf (p > Top) $
                 lamHead xs <> " " <> inline Top body
 
-        Let _ f e1 e2 ->
-            let (binder, rhs) = letParts f e1
-            in parensIf (p > Top) $
-                   "let " <> binder <> " = " <> inline Top rhs
-                       <> " in " <> inline Top e2
+        Let bs e ->
+            parensIf (p > Top) $
+                "let " <> sepBy "; " (map inlineBinding bs)
+                    <> " in " <> inline Top e
+
+    blockBinding i (_, f, e1) =
+        let (binder, rhs) = letParts f e1
+        in binder <> " =" <> blockTail i rhs
+
+    inlineBinding (_, f, e1) =
+        let (binder, rhs) = letParts f e1
+        in binder <> " = " <> inline Top rhs
 
     letParts f (Lam _ xs body) = (names (f:xs), body)
     letParts f e1              = (name toBS f, e1)
 
     lamHead xs = "\\" <> names xs <> " ->"
 
-    names = mconcat . spaced . map (name toBS)
-
-    spaced []     = []
-    spaced (x:xs) = x : map (" " <>) xs
+    names = sepBy " " . map (name toBS)
 
     newline i = "\n" <> B.string7 (replicate i ' ')
 
@@ -69,6 +73,9 @@ buildTerm toBS = \case
 
 name :: (s -> ByteString) -> s -> Builder
 name toBS = B.byteString . toBS
+
+sepBy :: Builder -> [Builder] -> Builder
+sepBy sep = mconcat . intersperse sep
 
 parensIf :: Bool -> Builder -> Builder
 parensIf True  b = "(" <> b <> ")"
