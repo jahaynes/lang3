@@ -25,6 +25,8 @@ library
                       Parse.LexAndParse
                       Parse.Parser
                       Parse.Token
+                      Pretty.Class
+                      Pretty.Expression
                       Transform.Class
                       Transform.ClosureConvert
     hs-source-dirs:   src
