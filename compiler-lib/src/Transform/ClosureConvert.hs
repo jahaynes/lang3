@@ -25,6 +25,7 @@ data CCExpr t s
     | CCApp !t !(CCExpr t s) ![CCExpr t s]
     | CCClosure !t !(Set s) ![s] !(CCExpr t s)
     | CCLet !t !s !(CCExpr t s) !(CCExpr t s)
+        deriving Show
 
 closureConvert :: (ClosureConvert a, Monad m, Ord s)
                => Module (Expr t s) s -> m (Module (a t s) s)
