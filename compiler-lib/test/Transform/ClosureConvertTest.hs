@@ -1,15 +1,18 @@
-module Transform.ClosureConvertTest (tests) where
+module Transform.ClosureConvertTest ( tests ) where
 
-import Parse.Expression
+import Parse.LexAndParse
+
+import Data.ByteString         (ByteString)
+import Data.String.Interpolate (iii)
 
 tests :: IO ()
-tests = putStrLn "Transform.ClosureConvert tests not yet implemented."
+tests = do
+    
+    let Right parsed = runUntypedExpr program1
 
-{-
-input :: String
-input = """
-    fn add(x, y) {
-        return x + y;
-    }
-    """
--}
+    print parsed
+
+program1 :: ByteString
+program1 = [iii|
+f (g x)
+|]

@@ -12,6 +12,7 @@ common common
         base,
         bytestring,
         containers,
+        string-interpolate,
         transformers,
         vector,
         vector-builder

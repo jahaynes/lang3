@@ -14,7 +14,7 @@ parseExpr :: Parser ParseState (Expr () ByteString)
 parseExpr = parseApply
 
 parseApply :: Parser ParseState (Expr () ByteString)
-parseApply = parseNonApply <|> parseApp
+parseApply = parseApp
 
     where
     parseApp =

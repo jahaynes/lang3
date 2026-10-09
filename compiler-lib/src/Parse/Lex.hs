@@ -37,12 +37,48 @@ lexer = do
     pure (positions, disambiguateNegation tokens)
 
 parseToken :: Parser LexState Token
-parseToken = litBool
+parseToken = keyword
+         <|> operator
+         <|> litBool
          <|> litInt
          <|> (TLitString <$> litString)
          <|> variable
 
     where
+    keyword :: Parser LexState Token
+    keyword = positioned TLet  (string "let"   <* notFollowedBy isAlphaNum)
+          <|> positioned TIn   (string "in"    <* notFollowedBy isAlphaNum)
+          <|> positioned TIf   (string "if"    <* notFollowedBy isAlphaNum)
+          <|> positioned TThen (string "then"  <* notFollowedBy isAlphaNum)
+          <|> positioned TElse (string "else"  <* notFollowedBy isAlphaNum)
+          <|> positioned TErr  (string "error" <* notFollowedBy isAlphaNum)
+          <|> positioned TCase (string "case"  <* notFollowedBy isAlphaNum)
+          <|> positioned TOf   (string "of"    <* notFollowedBy isAlphaNum)
+
+    operator :: Parser LexState Token
+    operator = positioned TEqEq     (string "==")
+           <|> positioned TGtEq     (string ">=")
+           <|> positioned TGt       (string ">")
+           <|> positioned TLtEq     (string "<=")
+           <|> positioned TLt       (string "<")
+           <|> positioned TEq       (string "=")
+           <|> positioned TColon    (string ":")
+           <|> positioned TPlusPlus (string "++")
+           <|> positioned TPlus     (string "+")
+           <|> positioned TArr      (string "->")
+           <|> positioned TMinus    (string "-")
+           <|> positioned TDollar   (string "$")
+           <|> positioned TMul      (string "*")
+           <|> positioned TDiv      (string "/")
+           <|> positioned TLambda   (string "\\")
+           <|> positioned TDot      (string ".")
+           <|> positioned TLParen   (string "(")
+           <|> positioned TRParen   (string ")")
+           <|> positioned TAnd      (string "&&")
+           <|> positioned TOr       (string "||")
+           <|> positioned TPipe     (string "|")
+
+    litBool :: Parser LexState Token
     litBool = TLitBool <$> boolean
 
     litInt :: Parser LexState Token
