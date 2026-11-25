@@ -1,5 +1,4 @@
 module Parse.LexAndParse ( runUntypedExpr
-                         , runUntypedExpr'
                          ) where
 
 import Core.Expression
@@ -20,12 +19,6 @@ runUntypedExpr input = do
     (_tokens, eExpr)    <- lexAndParseWith parseExpr input
     (_parseState, expr) <- eExpr
     pure expr
-
-runUntypedExpr' :: ByteString -> Expr () ByteString
-runUntypedExpr' input =
-    case runUntypedExpr input of
-        Left e -> error (show e)
-        Right r -> r
 
 lexAndParseWith :: Parser ParseState a
                 -> ByteString

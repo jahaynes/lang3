@@ -1,4 +1,4 @@
-module Pretty.Class ( Pretty ) where
+module Pretty.Class ( Pretty (..) ) where
 
 import Core.Expression   (Expr, Term)
 import Pretty.Expression (buildExpr, buildTerm)
