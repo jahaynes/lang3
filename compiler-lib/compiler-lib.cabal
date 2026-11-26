@@ -30,6 +30,7 @@ library
                       Pretty.Expression
                       Transform.Class
                       Transform.ClosureConvert
+                      Transform.Hoist
     hs-source-dirs:   src
     default-language: Haskell2010
 
@@ -40,6 +41,7 @@ test-suite compiler-lib-test
     hs-source-dirs:   test
     main-is:          Test.hs
     other-modules:    Transform.ClosureConvertTest
+                      Transform.HoistTest
     build-depends:
         compiler-lib,
         tasty,
