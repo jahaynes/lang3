@@ -41,4 +41,6 @@ test-suite compiler-lib-test
     main-is:          Test.hs
     other-modules:    Transform.ClosureConvertTest
     build-depends:
-        compiler-lib
+        compiler-lib,
+        tasty,
+        tasty-hunit
