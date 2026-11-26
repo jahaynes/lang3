@@ -5,7 +5,7 @@ module Transform.Anf ( CExpr (..)
                      , anf
                      ) where
 
-import Core.Expression (Term (..))
+import Core.Expression (Pattern (..), Term (..), patternVars)
 import Transform.Hoist (HExpr (..), HFun (..), HModule (..))
 
 import           Control.Monad.Trans.RWS.Strict (RWST, ask, asks, evalRWST, get, gets, local, modify, put)
@@ -33,6 +33,8 @@ data NExpr t s
 data CExpr t s
     = CApp !t !(Term t s) ![Term t s]
     | CMkClo !t !(Set s) !s
+    | CDataCon !t !s ![Term t s]
+    | CCase !t !(Term t s) ![(Pattern s, NExpr t s)]
         deriving (Eq, Show)
 
 data NState s =
@@ -86,6 +88,33 @@ asAnfExpr expr k =
             outer <- ask
             let k' v = local (const outer) (k v)
             asLet bs body k'
+
+        HDataCon ty c xs ->
+            asAtomicExprs xs $ \xs' ->
+                k (Complex $ CDataCon ty c xs')
+
+        HCase ty scrut alts ->
+            asAtomicExpr scrut $ \scrut' -> do
+                alts' <- traverse nAlt alts
+                k (Complex $ CCase ty scrut' alts')
+
+nAlt :: (Monad m, Ord s, IsString s)
+     => (Pattern s, HExpr t s)
+     -> Anf s m (Pattern s, NExpr t s)
+nAlt (pat, body) = do
+    let vs = patternVars pat
+    vs' <- traverse bind vs
+    let rs = zip vs vs'
+    withRenames rs $
+        (,) (renamePattern (M.fromList rs) pat) <$> normalise body
+
+renamePattern :: Ord s => Map s s -> Pattern s -> Pattern s
+renamePattern rs = go
+    where
+    go = \case
+        PVar v        -> PVar (M.findWithDefault v v rs)
+        PDataCon c ps -> PDataCon c (map go ps)
+        p             -> p
 
 asLet :: (Monad m, Ord s, IsString s)
       => [(t, s, HExpr t s)]
@@ -167,8 +196,10 @@ valueExpr = \case
 
 cType :: CExpr t s -> t
 cType = \case
-    CApp t _ _   -> t
-    CMkClo t _ _ -> t
+    CApp t _ _     -> t
+    CMkClo t _ _   -> t
+    CDataCon t _ _ -> t
+    CCase t _ _    -> t
 
 mentionedIn :: Ord s => s -> HExpr t s -> Bool
 mentionedIn a = go
@@ -181,3 +212,5 @@ mentionedIn a = go
         HMkClo _ fvs _  -> a `S.member` fvs
         HLet bs body    -> a `notElem` [n | (_, n, _) <- bs]
                         && (any (\(_, _, b) -> go b) bs || go body)
+        HDataCon _ _ xs -> any go xs
+        HCase _ s alts  -> go s || any (\(p, b) -> a `notElem` patternVars p && go b) alts

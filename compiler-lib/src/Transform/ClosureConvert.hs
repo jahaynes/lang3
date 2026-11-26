@@ -2,7 +2,7 @@ module Transform.ClosureConvert ( CCExpr (..)
                                 , closureConvert
                                 ) where
 
-import Core.Expression (Expr (..), Term (..))
+import Core.Expression (Expr (..), Pattern, Term (..), patternVars)
 import Core.Module     (Fun (..), Module (..))
 import Transform.Class
 
@@ -26,6 +26,8 @@ data CCExpr t s
     | CCApp !t !(CCExpr t s) ![CCExpr t s]
     | CCClosure !t !(Set s) ![s] !(CCExpr t s)
     | CCLet ![(t, s, CCExpr t s)] !(CCExpr t s)
+    | CCDataCon !t !s ![CCExpr t s]
+    | CCCase !t !(CCExpr t s) ![(Pattern s, CCExpr t s)]
         deriving (Eq, Show)
 
 closureConvert :: (ClosureConvert a, Monad m, Ord s)
@@ -76,7 +78,17 @@ ccExpr (FVExpr fvs expr) =
                 lett <$> traverse (\(t, n, e) -> (\e' -> (t, n, e')) <$> ccExpr e) bs
                      <*> ccExpr body
 
+        FVDataCon ty c xs ->
+            dataCon ty c <$> traverse ccExpr xs
+
+        FVCase ty scrut alts ->
+            caseOf ty <$> ccExpr scrut
+                      <*> traverse ccAlt alts
+
     where
+    ccAlt (pat, body) =
+        (,) pat <$> binding Local (patternVars pat) (ccExpr body)
+
     isLam :: FVExpr t s -> Bool
     isLam (FVExpr _ FVLam{}) = True
     isLam _                  = False
@@ -112,6 +124,8 @@ data FVNode t s
     | FVApp !t !(FVExpr t s) ![FVExpr t s]
     | FVLam !t ![s] !(FVExpr t s)
     | FVLet ![(t, s, FVExpr t s)] !(FVExpr t s)
+    | FVDataCon !t !s ![FVExpr t s]
+    | FVCase !t !(FVExpr t s) ![(Pattern s, FVExpr t s)]
 
 annotate :: Ord s => Expr t s -> FVExpr t s
 annotate = \case
@@ -137,11 +151,24 @@ annotate = \case
                        \\ S.fromList (map bindName bs'))
                   (FVLet bs' body')
 
+    DataCon ty c xs ->
+        let xs' = map annotate xs
+        in FVExpr (S.unions (map freeVars xs'))
+                  (FVDataCon ty c xs')
+
+    Case ty scrut alts ->
+        let scrut' = annotate scrut
+            alts'  = map (\(p, b) -> (p, annotate b)) alts
+        in FVExpr (S.unions (freeVars scrut'
+                                : [ freeVars b \\ S.fromList (patternVars p)
+                                  | (p, b) <- alts' ]))
+                  (FVCase ty scrut' alts')
+
     where
     termVars (Var _ s) = S.singleton s
     termVars _         = S.empty
 
-class (App a, Closure a, CTerm a, Let a)
+class (App a, Case a, Closure a, CTerm a, DataCon a, Let a)
     => ClosureConvert a
 
 instance ClosureConvert CCExpr
@@ -149,11 +176,17 @@ instance ClosureConvert CCExpr
 instance App CCExpr where
     app = CCApp
 
+instance Case CCExpr where
+    caseOf = CCCase
+
 instance Closure CCExpr where
     closure = CCClosure
 
 instance CTerm CCExpr where
     term = CCTerm
+
+instance DataCon CCExpr where
+    dataCon = CCDataCon
 
 instance Let CCExpr where
     lett = CCLet

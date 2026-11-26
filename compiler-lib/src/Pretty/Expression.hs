@@ -1,8 +1,9 @@
 module Pretty.Expression ( buildExpr
+                         , buildPattern
                          , buildTerm
                          ) where
 
-import Core.Expression (Expr (..), Term (..))
+import Core.Expression (Expr (..), Pattern (..), Term (..))
 
 import           Control.Monad.Trans.State.Strict (State, evalState, get, modify', put)
 import           Data.ByteString                  (ByteString)
@@ -33,6 +34,19 @@ buildExpr toBS e = evalState (go e) 0
             cat [ str "let ", sepBy (newline (c + 4)) (map binding bs)
                 , newline c, str "in ", go e ]
 
+        DataCon _ c xs ->
+            cat $ str (toBS c) : map arg xs
+
+        Case _ scrut alts -> do
+            c <- get
+            cat $ [str "case ", go scrut, str " of"]
+               <> map (alt (c + 2)) alts
+
+    arg x = cat [str " ", parensIf (needsParensArg x) (go x)]
+
+    alt c (p, body) =
+        cat [newline c, str (patternBS toBS p), str " -> ", go body]
+
     binding (_, f, e1) =
         let (binder, rhs) = letParts f e1
         in cat [binder, str " = ", go rhs]
@@ -41,6 +55,27 @@ buildExpr toBS e = evalState (go e) 0
     letParts f e1              = (str (toBS f), e1)
 
     names = str . C8.unwords . map toBS
+
+buildPattern :: (s -> ByteString) -> Pattern s -> Builder
+buildPattern toBS = B.byteString . patternBS toBS
+
+patternBS :: (s -> ByteString) -> Pattern s -> ByteString
+patternBS toBS = go
+    where
+    go = \case
+        PLitInt n     -> C8.pack (show n)
+        PLitBool b    -> if b then "True" else "False"
+        PVar v        -> toBS v
+        PDataCon c ps -> C8.unwords (toBS c : map sub ps)
+        PWild         -> "_"
+
+    sub p | needsParens p = "(" <> go p <> ")"
+          | otherwise     = go p
+
+    needsParens = \case
+        PDataCon _ (_:_) -> True
+        PLitInt n        -> n < 0
+        _                -> False
 
 buildTerm :: (s -> ByteString) -> Term t s -> Builder
 buildTerm toBS = B.byteString . termBS toBS
@@ -70,15 +105,18 @@ parensIf False b = b
 
 needsParensFun :: Expr t s -> Bool
 needsParensFun = \case
-    Term t -> isNegative t
-    App {} -> False
-    Lam {} -> True
-    Let {} -> True
+    Term t     -> isNegative t
+    App {}     -> False
+    Lam {}     -> True
+    Let {}     -> True
+    DataCon {} -> True
+    Case {}    -> True
 
 needsParensArg :: Expr t s -> Bool
 needsParensArg = \case
-    Term t -> isNegative t
-    _      -> True
+    Term t         -> isNegative t
+    DataCon _ _ [] -> False
+    _              -> True
 
 isNegative :: Term t s -> Bool
 isNegative (LitInt n) = n < 0

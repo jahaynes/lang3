@@ -1,7 +1,7 @@
 module Pretty.Class ( Pretty (..) ) where
 
-import Core.Expression   (Expr, Term)
-import Pretty.Expression (buildExpr, buildTerm)
+import Core.Expression   (Expr, Pattern, Term)
+import Pretty.Expression (buildExpr, buildPattern, buildTerm)
 
 import           Data.ByteString              (ByteString)
 import qualified Data.ByteString.Lazy    as L
@@ -16,6 +16,9 @@ instance Pretty ByteString where
 
 instance Pretty s => Pretty (Expr t s) where
     pretty = render . buildExpr pretty
+
+instance Pretty s => Pretty (Pattern s) where
+    pretty = render . buildPattern pretty
 
 instance Pretty s => Pretty (Term t s) where
     pretty = render . buildTerm pretty

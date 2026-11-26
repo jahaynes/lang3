@@ -128,6 +128,38 @@ tests = testGroup "Hoist"
                     (lett [("g", mkClo ["a"] "ll_1")]
                         (app (var "g") [var "ll_0"])))
             ]
+
+    , testCase "lambda in a case alternative is hoisted" $
+        hoistsExprTo
+            (eLam ["x"] (Case () (eVar "x")
+                [ (PDataCon "Cons" [PVar "h", PWild], eLam ["y"] (eVar "h")) ]))
+            [ fun "ll_0" ["h"] ["y"] (var "h")
+            , fun "main" []    ["x"]
+                (caseOf (var "x") [ (PDataCon "Cons" [PVar "h", PWild], mkClo ["h"] "ll_0") ])
+            ]
+
+    , testCase "lifted name is renamed in scrutinee and constructor fields" $
+        hoistsExprTo
+            (Let [((), "f", eLam ["x"] (eVar "x"))]
+                 (Case () (eVar "f")
+                     [ (PWild, DataCon () "Cons" [eVar "f", DataCon () "Nil" []]) ]))
+            [ fun "ll_0" [] ["x"] (var "x")
+            , fun "main" [] []
+                (caseOf (var "ll_0") [ (PWild, dataCon "Cons" [var "ll_0", dataCon "Nil" []]) ])
+            ]
+
+    , testCase "pattern variable shadows a lifted name" $
+        hoistsExprTo
+            (Let [((), "f", eLam ["x"] (eVar "x"))]
+                 (Case () (eVar "v")
+                     [ (PDataCon "Cons" [PVar "f", PWild], eVar "f")
+                     , (PWild, eVar "f") ]))
+            [ fun "ll_0" [] ["x"] (var "x")
+            , fun "main" [] []
+                (caseOf (var "v")
+                    [ (PDataCon "Cons" [PVar "f", PWild], var "f")
+                    , (PWild, var "ll_0") ])
+            ]
     ]
 
 hoistsTo :: ByteString -> [HFun () ByteString] -> Assertion
@@ -141,10 +173,23 @@ hoistsModuleTo srcs expected =
         Left err ->
             assertFailure $ "parse error: " <> C8.unpack err
 
-        Right parsed -> do
-            let Identity cc               = closureConvert (Module parsed) :: Identity (Module (CCExpr () ByteString) ByteString)
-                Identity (HModule actual) = hoist cc
-            actual @?= expected
+        Right parsed ->
+            hoistsParsedTo parsed expected
+
+hoistsExprTo :: Expr () ByteString -> [HFun () ByteString] -> Assertion
+hoistsExprTo e = hoistsParsedTo [Fun "main" e]
+
+hoistsParsedTo :: [Fun (Expr () ByteString) ByteString] -> [HFun () ByteString] -> Assertion
+hoistsParsedTo parsed expected = do
+    let Identity cc               = closureConvert (Module parsed) :: Identity (Module (CCExpr () ByteString) ByteString)
+        Identity (HModule actual) = hoist cc
+    actual @?= expected
+
+eVar :: ByteString -> Expr () ByteString
+eVar = Term . Var ()
+
+eLam :: [ByteString] -> Expr () ByteString -> Expr () ByteString
+eLam = Lam ()
 
 fun :: ByteString -> [ByteString] -> [ByteString] -> HExpr () ByteString -> HFun () ByteString
 fun name env = HFun name (S.fromList env)
@@ -160,6 +205,12 @@ app = HApp ()
 
 mkClo :: [ByteString] -> ByteString -> HExpr () ByteString
 mkClo env = HMkClo () (S.fromList env)
+
+dataCon :: ByteString -> [HExpr () ByteString] -> HExpr () ByteString
+dataCon = HDataCon ()
+
+caseOf :: HExpr () ByteString -> [(Pattern ByteString, HExpr () ByteString)] -> HExpr () ByteString
+caseOf = HCase ()
 
 lett :: [(ByteString, HExpr () ByteString)] -> HExpr () ByteString -> HExpr () ByteString
 lett bs = HLet [((), n, e) | (n, e) <- bs]

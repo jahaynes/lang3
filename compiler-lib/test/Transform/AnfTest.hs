@@ -127,6 +127,79 @@ tests = testGroup "Anf"
                 (nlet "anf_1" (capp (var "k") [var "y"])
                     (capp (var "h") [var "anf_1"]))
             ]
+
+    , testCase "constructor fields are let-bound" $
+        normsExprTo
+            (DataCon () "Cons" [App () (eVar "g") [eVar "x"], DataCon () "Nil" []])
+            [ fun "main" [] []
+                (nlet "anf_0" (capp (var "g") [var "x"])
+                    (nlet "anf_1" (cdataCon "Nil" [])
+                        (cdataCon "Cons" [var "anf_0", var "anf_1"])))
+            ]
+
+    , testCase "complex scrutinee is let-bound" $
+        normsExprTo
+            (Case () (App () (eVar "f") [eVar "x"]) [ (PWild, Term (LitInt 1)) ])
+            [ fun "main" [] []
+                (nlet "anf_0" (capp (var "f") [var "x"])
+                    (ccase (var "anf_0") [ (PWild, atom (int 1)) ]))
+            ]
+
+    , testCase "case in argument position is let-bound" $
+        normsExprTo
+            (App () (eVar "f") [Case () (eVar "x") [ (PWild, Term (LitInt 1)) ]])
+            [ fun "main" [] []
+                (nlet "anf_0" (ccase (var "x") [ (PWild, atom (int 1)) ])
+                    (capp (var "f") [var "anf_0"]))
+            ]
+
+    , testCase "lets in an alternative stay in the alternative" $
+        normsExprTo
+            (Case () (eVar "x")
+                [ (PDataCon "Nil" [],
+                   App () (eVar "f") [Let [((), "a", App () (eVar "g") [Term (LitInt 1)])] (eVar "a")]) ])
+            [ fun "main" [] []
+                (ccase (var "x")
+                    [ (PDataCon "Nil" [],
+                       nlet "a" (capp (var "g") [int 1]) (capp (var "f") [var "a"])) ])
+            ]
+
+    , testCase "pattern variable that shadows a parameter is renamed" $
+        normsExprTo
+            (Lam () ["x"] (Case () (eVar "x")
+                [ (PDataCon "Cons" [PVar "x", PVar "t"], App () (eVar "f") [eVar "x", eVar "t"]) ]))
+            [ fun "main" [] ["x"]
+                (ccase (var "x")
+                    [ (PDataCon "Cons" [PVar "anf_0", PVar "t"],
+                       capp (var "f") [var "anf_0", var "t"]) ])
+            ]
+
+    , testCase "floated let that would capture a pattern variable is renamed" $
+        normsExprTo
+            (Case () (eVar "x")
+                [ (PDataCon "Cons" [PVar "y", PWild],
+                   App () (eVar "f") [Let [((), "y", Term (LitInt 1))] (eVar "y"), eVar "y"]) ])
+            [ fun "main" [] []
+                (ccase (var "x")
+                    [ (PDataCon "Cons" [PVar "y", PWild],
+                       nlet "anf_0" (atom (int 1)) (capp (var "f") [var "anf_0", var "y"])) ])
+            ]
+
+    , testCase "constructor mentioning its own let is a NLetRec" $
+        normsExprTo
+            (Let [((), "xs", DataCon () "Cons" [Term (LitInt 1), eVar "xs"])] (eVar "xs"))
+            [ fun "main" [] []
+                (nletRec [("xs", cdataCon "Cons" [int 1, var "xs"])] (atom (var "xs")))
+            ]
+
+    , testCase "a pattern-bound name doesn't make a let recursive" $
+        normsExprTo
+            (Let [((), "a", Case () (eVar "x") [ (PDataCon "Cons" [PVar "a", PWild], eVar "a") ])]
+                 (eVar "a"))
+            [ fun "main" [] []
+                (nlet "anf_0" (ccase (var "x") [ (PDataCon "Cons" [PVar "a", PWild], atom (var "a")) ])
+                    (atom (var "anf_0")))
+            ]
     ]
 
 normsTo :: ByteString -> [NFun () ByteString] -> Assertion
@@ -140,11 +213,21 @@ normsModuleTo srcs expected =
         Left err ->
             assertFailure $ "parse error: " <> C8.unpack err
 
-        Right parsed -> do
-            let Identity cc               = closureConvert (Module parsed) :: Identity (Module (CCExpr () ByteString) ByteString)
-                Identity hoisted          = hoist cc
-                Identity (NModule actual) = anf hoisted
-            actual @?= expected
+        Right parsed ->
+            normsParsedTo parsed expected
+
+normsExprTo :: Expr () ByteString -> [NFun () ByteString] -> Assertion
+normsExprTo e = normsParsedTo [Fun "main" e]
+
+normsParsedTo :: [Fun (Expr () ByteString) ByteString] -> [NFun () ByteString] -> Assertion
+normsParsedTo parsed expected = do
+    let Identity cc               = closureConvert (Module parsed) :: Identity (Module (CCExpr () ByteString) ByteString)
+        Identity hoisted          = hoist cc
+        Identity (NModule actual) = anf hoisted
+    actual @?= expected
+
+eVar :: ByteString -> Expr () ByteString
+eVar = Term . Var ()
 
 fun :: ByteString -> [ByteString] -> [ByteString] -> NExpr () ByteString -> NFun () ByteString
 fun name env = NFun name (S.fromList env)
@@ -163,6 +246,12 @@ capp f = CExpr . CApp () f
 
 cmkClo :: [ByteString] -> ByteString -> NExpr () ByteString
 cmkClo env = CExpr . CMkClo () (S.fromList env)
+
+cdataCon :: ByteString -> [Term () ByteString] -> NExpr () ByteString
+cdataCon c = CExpr . CDataCon () c
+
+ccase :: Term () ByteString -> [(Pattern ByteString, NExpr () ByteString)] -> NExpr () ByteString
+ccase scrut = CExpr . CCase () scrut
 
 nlet :: ByteString -> NExpr () ByteString -> NExpr () ByteString -> NExpr () ByteString
 nlet = NLet ()
