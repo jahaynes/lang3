@@ -29,6 +29,7 @@ library
                       Pretty.Class
                       Pretty.Expression
                       Transform.Class
+                      Transform.Anf
                       Transform.ClosureConvert
                       Transform.Hoist
     hs-source-dirs:   src
@@ -40,7 +41,8 @@ test-suite compiler-lib-test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Test.hs
-    other-modules:    Transform.ClosureConvertTest
+    other-modules:    Transform.AnfTest
+                      Transform.ClosureConvertTest
                       Transform.HoistTest
     build-depends:
         compiler-lib,
