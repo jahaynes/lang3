@@ -1,4 +1,4 @@
 snapshot:
   url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/62.yaml
 
-packages: [compiler-lib]
+packages: [compiler-lib, compiler-server]

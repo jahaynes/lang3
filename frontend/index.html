@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lang3</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- POSTs `source` to /compile; the plain-text response replaces #output (as text, not HTML). -->
+  <form hx-post="/compile"
+        hx-target="#output"
+        hx-swap="textContent"
+        hx-trigger="submit, keydown[(metaKey||ctrlKey)&&key=='Enter'] from:#source">
+    <header>
+      <strong>lang3</strong>
+      <button type="submit">Run</button>
+      <span class="hint">⌘/Ctrl+Enter</span>
+    </header>
+    <main>
+      <textarea id="source" name="source" spellcheck="false" autofocus
+                autocomplete="off" autocapitalize="off"></textarea>
+      <pre id="output"></pre>
+    </main>
+  </form>
+
+  <script>
+    // Tab inserts two spaces instead of moving focus.
+    document.getElementById('source').addEventListener('keydown', e => {
+      if (e.key !== 'Tab' || e.shiftKey) return;
+      e.preventDefault();
+      document.execCommand('insertText', false, '  '); // keeps native undo
+    });
+  </script>
+</body>
+</html>
