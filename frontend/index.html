@@ -8,7 +8,8 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- POSTs `source` to /compile; the plain-text response replaces #output (as text, not HTML). -->
+  <!-- POSTs `source` to /compile; the plain-text response replaces #output (as text, not HTML).
+       The X-Compile-Status response header (ok|error) drives the status bar. -->
   <form hx-post="/compile"
         hx-target="#output"
         hx-swap="textContent"
@@ -25,12 +26,56 @@
     </main>
   </form>
 
+  <footer id="status">
+    <span id="compile-status" data-state="idle"><i></i><span>ready</span></span>
+    <span id="conn" data-state="checking" title="polls /health every 5s"
+          hx-get="/health" hx-trigger="load, every 5s" hx-swap="none"
+          hx-request='{"timeout": 3000}'><i></i><span>checking…</span></span>
+  </footer>
+
   <script>
     // Tab inserts two spaces instead of moving focus.
     document.getElementById('source').addEventListener('keydown', e => {
       if (e.key !== 'Tab' || e.shiftKey) return;
       e.preventDefault();
       document.execCommand('insertText', false, '  '); // keeps native undo
+    });
+
+    // Status bar. Every htmx request ends in htmx:afterRequest; xhr.status 0
+    // means it never got a response (refused, timed out, aborted).
+    const compileEl = document.getElementById('compile-status');
+    const connEl    = document.getElementById('conn');
+    const set = (el, state, text) => {
+      el.dataset.state = state;
+      el.lastElementChild.textContent = text;
+    };
+    const stamp = () => new Date().toLocaleTimeString();
+    let sentAt = 0;
+
+    document.body.addEventListener('htmx:beforeRequest', e => {
+      if (e.detail.elt.tagName !== 'FORM') return;
+      sentAt = performance.now();
+      set(compileEl, 'pending', 'compiling…');
+    });
+
+    document.body.addEventListener('htmx:afterRequest', e => {
+      const xhr = e.detail.xhr;
+      const reached = xhr.status !== 0;
+      set(connEl, reached ? 'ok' : 'down',
+          reached ? 'connected' : `disconnected (${stamp()})`);
+
+      if (e.detail.elt.tagName !== 'FORM') return;
+      const ms = Math.round(performance.now() - sentAt);
+      if (!reached) {
+        set(compileEl, 'unsent', 'request failed: backend unreachable');
+      } else if (!e.detail.successful) {
+        set(compileEl, 'error', `server error ${xhr.status} (${ms} ms)`);
+      } else {
+        const ok = xhr.getResponseHeader('X-Compile-Status') === 'ok';
+        set(compileEl, ok ? 'ok' : 'error',
+            `${ok ? 'compiled' : 'compile error'} (${ms} ms, ${stamp()})`);
+        document.getElementById('output').classList.toggle('error', !ok);
+      }
     });
   </script>
 </body>

@@ -26,21 +26,25 @@ newtype CompileReq =
 instance FromForm CompileReq where
     fromForm f = CompileReq <$> parseUnique "source" f
 
-type Api = "compile" :> ReqBody '[FormUrlEncoded] CompileReq :> Post '[PlainText] Text
+-- X-Compile-Status is "ok" or "error"; the page uses it to colour the status bar.
+type CompileResult = Headers '[Header "X-Compile-Status" Text] Text
+
+type Api = "compile" :> ReqBody '[FormUrlEncoded] CompileReq :> Post '[PlainText] CompileResult
+      :<|> "health"  :> Get '[PlainText] Text
       :<|> Raw
 
 server :: FilePath -> Server Api
 server staticDir = compileH
+              :<|> pure "ok"
               :<|> serveDirectoryWith (defaultWebAppSettings staticDir)
                        { ssIndices = [unsafeToPiece "index.html"] }
 
 -- Errors are returned as 200 so htmx swaps them into the output pane.
-compileH :: CompileReq -> Handler Text
+compileH :: CompileReq -> Handler CompileResult
 compileH (CompileReq src) =
-    pure . decode $
-        case runUntypedExpr (T.encodeUtf8 src) of
-            Left err   -> "error: " <> err
-            Right expr -> pretty expr
+    pure $ case runUntypedExpr (T.encodeUtf8 src) of
+        Left err   -> addHeader "error" (decode err)
+        Right expr -> addHeader "ok"    (decode (pretty expr))
   where
     decode = T.decodeUtf8With T.lenientDecode
 
@@ -55,6 +59,7 @@ devCors = cors $ \req -> do
                 , corsRequestHeaders = [ "Content-Type", "HX-Request", "HX-Current-URL"
                                        , "HX-Target", "HX-Trigger", "HX-Trigger-Name"
                                        , "HX-Boosted", "HX-Prompt" ]
+                , corsExposedHeaders = Just ["X-Compile-Status"]
                 , corsVaryOrigin     = True
                 }
         else Nothing
