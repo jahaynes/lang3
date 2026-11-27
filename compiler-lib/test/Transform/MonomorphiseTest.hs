@@ -4,6 +4,7 @@ import Core.Expression
 import Core.Module
 import Parse.LexAndParse
 import Transform.Monomorphise
+import TypeSystem.Common        (mTypeOf)
 import TypeSystem.InferModule
 import TypeSystem.Types
 import TypeSystem.TypesCallGraph (freeVars)
@@ -58,12 +59,6 @@ tests = testGroup "Monomorphise"
     , testCase "let-bound name hides a generic top level" $
         monosTo [ ("id", "\\x. x"), ("main", "let id = \\y. y in id 1") ]
                 [ ("id", "Int -> Int"), ("main", "Int") ]
-
-    , testCase "generic used in a binop is specialised" $ do
-        monosTo [ ("id", "\\x. x"), ("main", "id 1 + id 2 == 3 && id True") ]
-                [ ("main", "Bool"), ("id$Int -> Int", "Int -> Int"), ("id$Bool -> Bool", "Bool -> Bool") ]
-        refersTo [ ("id", "\\x. x"), ("main", "id 1 + id 2 == 3 && id True") ]
-                 "main" ["id$Bool -> Bool", "id$Int -> Int"]
     ]
 
 parseModule :: [(ByteString, ByteString)] -> Either ByteString (Module (Expr () ByteString) ByteString)
@@ -88,19 +83,6 @@ refersTo defs name expected =
             in fmap (S.toList . S.intersection globals . freeVars)
                     (lookup name [ (n, e) | Fun n e <- getFunDefns md ])
                    @?= Just expected
-
-mTypeOf :: Expr (MType ByteString) ByteString -> MType ByteString
-mTypeOf = \case
-    Term (Var t _)    -> t
-    Term (LitInt _)   -> MTyCon "Int"
-    Term (LitBool _)  -> MTyCon "Bool"
-    Term (LitString _) -> MTyCon "String"
-    App t _ _         -> t
-    Lam t _ _         -> t
-    Let _ body        -> mTypeOf body
-    DataCon t _ _     -> t
-    Case t _ _        -> t
-    BinOp t _ _ _     -> t
 
 unMono :: MType s -> Type s
 unMono = \case

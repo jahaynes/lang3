@@ -32,6 +32,7 @@ library
                       Transform.Class
                       Transform.Anf
                       Transform.ClosureConvert
+                      Transform.EtaSaturate
                       Transform.Hoist
                       Transform.Monomorphise
                       TypeSystem.CallGraph
@@ -53,6 +54,7 @@ test-suite compiler-lib-test
     other-modules:    Parse.ExpressionTest
                       Transform.AnfTest
                       Transform.ClosureConvertTest
+                      Transform.EtaSaturateTest
                       Transform.HoistTest
                       Transform.MonomorphiseTest
                       TypeSystem.InferTest

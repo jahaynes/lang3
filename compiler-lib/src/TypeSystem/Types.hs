@@ -6,6 +6,8 @@ module TypeSystem.Types ( DataDefn (..)
                         , Polytype (..)
                         , Type (..)
                         , arity
+                        , mArity
+                        , mTyArr
                         , renderName
                         , renderType
                         , tyArr
@@ -56,6 +58,16 @@ data MType s = MTyCon s
              | MTyArr ![MType s] !(MType s)
              | MTyApp !(MType s) !(MType s)
                 deriving (Eq, Ord, Functor)
+
+-- | The 'MType' counterpart of 'tyArr'.
+mTyArr :: [MType s] -> MType s -> MType s
+mTyArr [] r = r
+mTyArr ps r = MTyArr ps r
+
+-- | The 'MType' counterpart of 'arity'.
+mArity :: MType s -> Int
+mArity (MTyArr ps _) = length ps
+mArity _             = 0
 
 instance Show s => Show (MType s) where
     show (MTyCon c) = show c

@@ -5,6 +5,7 @@ import Core.Expression          (Expr)
 import Core.Module              (Module)
 import Transform.Anf            (NModule, anf)
 import Transform.ClosureConvert (closureConvert)
+import Transform.EtaSaturate    (etaSaturate)
 import Transform.Hoist          (hoist)
 import Transform.Monomorphise   (monomorphise)
 import TypeSystem.InferModule   (inferModule)
@@ -18,6 +19,7 @@ compile :: (IsString s, Ord s, Show s) => [DataDefn s]
 compile dataDefns md = do
     typed   <- inferModule dataDefns md
     mono    <- monomorphise typed
-    cc      <- closureConvert mono
+    sat     <- etaSaturate mono
+    cc      <- closureConvert sat
     hoisted <- hoist cc
     anf hoisted

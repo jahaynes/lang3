@@ -5,6 +5,7 @@ module TypeSystem.Common ( GroupState (..)
                          , freshTVar
                          , instantiate
                          , mapExprType
+                         , mTypeOf
                          , numToVar
                          , substituteType
                          , termType
@@ -71,6 +72,24 @@ termType = \case
     LitInt _    -> typeInt
     LitBool _   -> typeBool
     LitString _ -> typeString
+
+-- | The 'MType' counterpart of 'typeOf'.
+mTypeOf :: IsString s => Expr (MType s) s -> MType s
+mTypeOf = \case
+    Term t        -> mTermType t
+    App t _ _     -> t
+    Lam t _ _     -> t
+    Let _ body    -> mTypeOf body
+    DataCon t _ _ -> t
+    Case t _ _    -> t
+    BinOp t _ _ _ -> t
+
+    where
+    mTermType = \case
+        Var t _     -> t
+        LitInt _    -> MTyCon "Int"
+        LitBool _   -> MTyCon "Bool"
+        LitString _ -> MTyCon "String"
 
 mapExprType :: (t -> u) -> Expr t s -> Expr u s
 mapExprType f = runIdentity . traverseExprType (Identity . f)
