@@ -1,0 +1,64 @@
+Hoist: notes on the port from mini-lang
+=======================================
+
+Transform.Hoist was ported from /shared/junk-drawer/mini-lang/src/Transform/Hoist.hs.
+It could not be copied unchanged, because the new ClosureConvert produces a
+different IR.
+
+
+Example
+-------
+
+    let f x = f x in let a = 1 in let g y = a in g f
+
+hoists to
+
+    HFun "ll_0"     {}  ["x"] (ll_0 x)   -- lifted: let binding removed, refs renamed
+    HFun "ll_1"     {a} ["y"] a
+    HFun "program1" {}  []    (let a = 1 in let g = MkClo {a} ll_1 in g ll_0)
+
+
+How it differs from the old version
+-----------------------------------
+
+* Closure names
+  The old Hoist reused each closure's label from KnowLambdas (CCKClo carried
+  one). The new CCClosure has no label, so Hoist makes fresh names.
+  `fresh` builds them as "ll_<n>" ("lambda lifted") via `IsString s`, from a
+  counter that runs across the whole module.
+  The naming function must produce names that can't clash with names
+  written in source code.
+
+* Lifted let groups (new case)
+  When every right-hand side in a let group is a closure that captures
+  nothing (what ClosureConvert marks as Lifted), the binding is removed
+  entirely. Those functions move to the top level, and references to them
+  are renamed to the new names. Local bindings of the same name (lambda
+  parameters, let binders, captured variables) shadow the renaming.
+  Without the renaming, a recursive reference like `f` inside `ll_0` would
+  point at nothing.
+
+* Other let groups
+  Their closures are hoisted too, but the let stays and binds a MkClo of
+  the captured variables.
+
+* Removed
+  The old Self / SelfAppClo handling and the Op / If / Case / DataCon cases,
+  since the new IR doesn't have them. The expression type is now just
+  HTerm | HApp | HMkClo | HLet, built through the same class-based approach
+  (class Hoist = App, CTerm, Let, MkClo).
+
+
+Other changes
+-------------
+
+* Added a MkClo class to src/Transform/Class.hs.
+* Registered Transform.Hoist and the new test Transform.HoistTest in
+  compiler-lib.cabal, and called the test from test/Test.hs.
+
+
+Not yet done
+------------
+
+* The old Pretty.Transform.Hoist printer was not ported. The new Pretty
+  module uses a different Builder-based setup.

@@ -1,0 +1,54 @@
+TypeSystem: notes on the port from mini-lang
+============================================
+
+src/TypeSystem/ was ported from /shared/junk-drawer/mini-lang/src/TypeSystem/.
+The inference algorithm is unchanged (constraint generation per binding
+group, arity-aware solving with AppC, generalisation of top-level functions).
+
+Entry point:
+    inferModule :: [DataDefn s] -> Module (Expr () s) s
+                -> Either s (Module (Expr (Type s) s) s)
+
+It runs first in the pipeline: Pipeline.compile is
+    inferModule >=> closureConvert >=> hoist >=> anf
+and the later passes carry the inferred types along as their `t`.
+
+
+How it differs from the old version
+-----------------------------------
+
+* Core.Expression has no BinOp or If, so those cases (and opType) are gone.
+
+* Literals are inside Term and carry no annotation, so typeOf gives them
+  their literal type (Int / Bool / String). A Let has its body's type.
+
+* Let is a recursive binding group, [(t, s, Expr)]: every name is seeded
+  (seedType), all are in scope in every right-hand side and the body, and
+  each binding's annotation is its name's (monomorphic) type.
+
+* Core.Module has no data definitions, so inferModule takes them as an
+  argument: DataDefn / DCon now live in TypeSystem.Types.
+
+* The output keeps the input's function order (the old one came out in plan
+  order). There's no TFun / TModule: quantifiers aren't stored, since every
+  type variable left in a top-level function after generalisation is
+  quantified (renamed a0, b0, ...).
+
+* What used to be `error` is now a Left: unbound variables, unknown
+  constructors, a variable bound twice in one pattern, undeclared type
+  variables in a constructor, and duplicate top-level / constructor names.
+
+* The call graph only has edges between top-level functions; other free
+  names are left for inference to report. planExcludingPretyped was a no-op
+  and is gone.
+
+* Left behind, as mini-lang codegen/runtime specifics: checkEntry ("main"
+  must not be a function), checkLetRec (no self-reference outside a lambda
+  under strict evaluation), checkLetRecTyped (backpatched closures), and
+  MType (for Monomorphise). Bring checkLetRec back if lang3 stays strict.
+
+* createPlan is now Data.Graph.stronglyConnComp (O(V+E)), replacing the old
+  path-enumerating findCycles / findStandaloneCycle (exponential in the worst
+  case). It can't fail, so it returns [Set s] rather than Either. Each group
+  is one SCC; the old plan also merged independent functions that became
+  ready at the same time into one group, which gave the same types.

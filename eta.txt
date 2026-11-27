@@ -1,0 +1,82 @@
+Eta-saturation phase (ported from junk-drawer/mini-lang Transform/EtaSaturate.hs)
+==================================================================================
+
+Pipeline position
+-----------------
+  inferModule -> monomorphise -> etaSaturate -> closureConvert -> hoist -> anf
+
+  Same place as in mini-lang (mModule -> eModule -> ...). It needs concrete
+  arities, so it must come after monomorphisation. Its input and output are
+  Module (Expr (MType s) s) s.
+
+What it does
+------------
+The runtime has no partial-application objects, so every call must pass
+exactly as many arguments as its callee takes. Arity is part of the type
+((Int, Int) -> Int takes 2 at once; Int -> Int -> Int takes 1), and
+inference has already rejected over-application. So each call is fixed up
+by looking only at its head's type:
+
+- A saturated call is left alone.
+- A call short of some arguments becomes a lambda over the rest:
+      k 1           ~>  \eta$0 -> k(1, eta$0)
+  A head or argument that isn't a value is let-bound outside the new
+  lambda, in evaluation order, so it is still evaluated once, in the same
+  place:
+      k (id 1)      ~>  let eta$0 = id(1) in \eta$1 -> k(eta$0, eta$1)
+- A partial call that is itself called is one call:  (k 1) 2  ~>  k(1, 2)
+  A call that already has all its head's arguments is not merged with a
+  call of its result:  (f 1) 2  stays  f(1)(2)  when f : Int -> Int -> Int.
+- A top level that isn't a lambda (inc = k 1) is a 0-parameter function,
+  matching how Hoist.hFun compiles it. A reference to it is a call:
+  inc 2 ~> inc()(2). If such a top level saturates to a lambda, it returns
+  the lambda:  let eta$1 = (\eta$0 -> k(1, eta$0)) in eta$1.
+- \ -> e and e [] both mean e (only a top-level \ -> e is kept, as a
+  0-parameter function). A let of \ -> e is a let of e.
+- Lambda-, let- and pattern-bound names hide a 0-parameter top level of the
+  same name.
+
+Files
+-----
+  src/Transform/EtaSaturate.hs      new: the phase (exports etaSaturate)
+  src/TypeSystem/Types.hs           added mTyArr, mArity (MType versions of
+                                    tyArr, arity)
+  src/TypeSystem/Common.hs          added mTypeOf (MType version of typeOf)
+  src/Pipeline.hs                   wires the phase in after monomorphise
+  compiler-lib.cabal, test/Test.hs  register the module and tests
+  test/Transform/EtaSaturateTest.hs 12 tests. Results are printed as
+                                    f(x, y) / f(x)(y) / f() so arity is
+                                    visible; copy names like
+                                    "k$(Int, Int) -> Int" are shown as k.
+  test/Transform/MonomorphiseTest.hs now uses the shared mTypeOf instead of
+                                    a local copy
+
+Differences from mini-lang
+--------------------------
+- AST: lang3 has no BinOp or If (operators are ordinary calls), so those
+  cases are gone. Variables are wrapped in Term; every Term (including
+  string literals) counts as a value when deciding what to let-bind.
+- Let is a recursive group [(t, s, e)] whose t is the binder's type (not
+  the whole let's, as in mini-lang). All of a group's names hide
+  0-parameter top levels in every right-hand side and the body. Let-bindings
+  made here use the right-hand side's type.
+- Fresh names: mini-lang used gen "eta" n (printed eta%n). lang3 has no
+  Name class, so they are "eta$n". "$" can't occur in a source identifier,
+  so these names can't capture or be captured by the program's own names.
+  (Hoist's ll_n and Anf's anf_n could in principle collide with source
+  names.)
+- Errors: the "call passes more arguments than the head takes" case was
+  `error`. It is now Left, like the rest of lang3. It shouldn't happen,
+  because inference rejects over-application.
+
+Open points / TODO
+------------------
+- mini-lang ran KnowLambdas between eta and closure conversion. lang3 has
+  no such phase. Not ported, since it wasn't asked for.
+- No tests with data constructors or case yet. The DataCon and Case
+  branches are just structural recursion.
+- Not committed yet.
+
+Building
+--------
+  cd compiler-lib && cabal test     (104 tests pass, no -Wall warnings)

@@ -1,0 +1,57 @@
+Anf: notes on the port from mini-lang
+=====================================
+
+Transform.Anf was ported from /shared/junk-drawer/mini-lang/src/Transform/Anf.hs.
+It could not be copied unchanged, because the new Hoist produces a different
+IR (HTerm | HApp | HMkClo | HLet with binding groups).
+
+Entry point: `anf :: HModule t s -> m (NModule t s)` (was `nModule`).
+
+
+How it differs from the old version
+-----------------------------------
+
+* Atoms are Core.Expression's Term (Var / LitInt / LitBool / LitString)
+  instead of a separate AExpr type. NExpr's `AExpr` constructor wraps a Term.
+
+* CExpr is just CApp | CMkClo. The function position of CApp is any atom,
+  not only a name, so the old "literal invoked as function" `error` calls are
+  gone. A later type checker or codegen pass has to reject those.
+
+* Lets carry their type (NLet t s rhs body), as the new IR's lets do.
+  NLetRec takes a whole binding group: [(t, s, NExpr t s)].
+
+* Let groups: the whole group is an NLetRec if any of its names occurs free
+  in any of its right-hand sides. Those right-hand sides are normalised in
+  place, as before. Otherwise the group becomes a chain of NLets, with each
+  right-hand side's own lets floated out.
+
+* Binder renaming (new). Floating a let out is only safe if its name can't
+  capture another variable. The old code relied on names being unique.
+  Here nothing makes them unique, so e.g.
+      \x. f (let x = 1 in x) x
+  would have become  let x = 1 in f x x.
+  Now every let binder that's already bound in the function (a global, a
+  captured variable, a parameter, or an earlier binder) gets a fresh name,
+  and references and MkClo captures are renamed to match. After that every
+  binder in a function is distinct, so lets can float freely.
+
+* Fresh names are "anf_<n>" via `IsString s`, from a counter that runs across
+  the whole module. Source identifiers are alphanumeric, so they can't clash.
+
+* Removed: Self / SelfApp / BinPrimOp / If / DataCon / Case. The new IR
+  doesn't have them yet.
+
+
+Other changes
+-------------
+
+* Registered Transform.Anf and the new test Transform.AnfTest in
+  compiler-lib.cabal, and called the test from test/Test.hs.
+
+
+Not yet done
+------------
+
+* The old Pretty.Transform.Anf printer was not ported, for the same reason
+  as Hoist's: the new Pretty module uses a different Builder-based setup.

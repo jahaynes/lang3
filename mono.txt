@@ -1,0 +1,70 @@
+Monomorphisation phase (ported from junk-drawer/mini-lang Transform/Monomorphise.hs)
+=====================================================================================
+
+Pipeline position
+-----------------
+  inferModule -> monomorphise -> closureConvert -> hoist -> anf
+
+  compile now returns NModule (MType s) s (was NModule (Type s) s).
+  closureConvert / hoist / anf are generic in the annotation type, so they
+  needed no changes.
+
+What it does
+------------
+- Roots: every function that isn't generic, and every function nothing else
+  calls (e.g. main), is kept under its own name. Any type variables left in
+  a root default to Int.
+- Every use of a generic function at a concrete type gets its own copy,
+  named  f$T  (e.g. "id$Int -> Int", "k$(Int, Bool) -> Int").
+- Copies are memoised on (name, concrete type). The memo entry is recorded
+  before the copy's body is processed, so self- and mutual recursion reuse
+  the copy already being built instead of looping.
+- Local names (lambda params, let binders, pattern variables) that share a
+  top-level function's name hide it and are left alone.
+- Output order: kept functions in source order, then copies in the order
+  they finish being built (innermost first).
+
+Files
+-----
+  src/Transform/Monomorphise.hs     new: the phase (exports monomorphise)
+  src/TypeSystem/Types.hs           added MType: Type without TyVar
+  src/TypeSystem/Common.hs          added traverseExprType; mapExprType now
+                                    defined via it
+  src/Pipeline.hs                   wires the phase in
+  compiler-lib.cabal, test/Test.hs  register the module and tests
+  test/Transform/MonomorphiseTest.hs  9 tests: kept functions, defaulting,
+                                    one copy per type, shared copies,
+                                    self/mutual recursion, shadowing by
+                                    lambda and let
+
+Differences from mini-lang
+--------------------------
+- Quantified variables: lang3 has no TFun with a quantifier set. Inference
+  (InferModule.generalise) quantifies every type variable left in a
+  top-level function, so the phase uses all of them (freeInType over
+  exprTypes).
+- Names: lang3 names are plain IsString, with no Name/Spec class. Copies
+  are named  renderName f ++ "$" ++ renderType t.  "$" is an operator in the
+  lexer, so these can't clash with source identifiers. Spaces are kept on
+  purpose: stripping them would make "List Int" and a type "ListInt"
+  produce the same name.
+- Errors: mini-lang called `error` for unresolved type variables and
+  mismatched or inconsistent instantiations. Here these return Left, like
+  the rest of lang3.
+- AST shape: Let binds a (recursive) group [(t, s, e)]. Variables are
+  wrapped in Term. Literals carry no annotation.
+
+Open points / TODO
+------------------
+- If a future code generator can't handle spaces or "$" in names, the
+  naming scheme for copies needs revisiting.
+- No data-type (ADT) specific tests yet. Constructors aren't top-level
+  functions, so they are never copied; only their annotations become
+  concrete.
+- Not committed yet.
+
+Building
+--------
+  cd compiler-lib && cabal test     (92 tests pass)
+  `stack test` from /shared/lang3 fails: .stack-work is owned by another
+  user (would need --allow-different-user).
