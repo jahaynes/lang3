@@ -3,7 +3,7 @@ module Pretty.Expression ( buildExpr
                          , buildTerm
                          ) where
 
-import Core.Expression (Expr (..), Pattern (..), Term (..))
+import Core.Expression (Expr (..), Op (..), Pattern (..), Term (..))
 
 import           Control.Monad.Trans.State.Strict (State, evalState, get, modify', put)
 import           Data.ByteString                  (ByteString)
@@ -42,6 +42,11 @@ buildExpr toBS e = evalState (go e) 0
             cat $ [str "case ", go scrut, str " of"]
                <> map (alt (c + 2)) alts
 
+        BinOp _ op a b ->
+            cat [operand a, str " ", str (opBS op), str " ", operand b]
+
+    operand x = parensIf (needsParensOperand x) (go x)
+
     arg x = cat [str " ", parensIf (needsParensArg x) (go x)]
 
     alt c (p, body) =
@@ -55,6 +60,14 @@ buildExpr toBS e = evalState (go e) 0
     letParts f e1              = (str (toBS f), e1)
 
     names = str . C8.unwords . map toBS
+
+opBS :: Op -> ByteString
+opBS = \case
+    Plus   -> "+"
+    Times  -> "*"
+    Equals -> "=="
+    And    -> "&&"
+    Or     -> "||"
 
 buildPattern :: (s -> ByteString) -> Pattern s -> Builder
 buildPattern toBS = B.byteString . patternBS toBS
@@ -111,6 +124,15 @@ needsParensFun = \case
     Let {}     -> True
     DataCon {} -> True
     Case {}    -> True
+    BinOp {}   -> True
+
+-- No precedence yet, so nested operators are always parenthesised.
+needsParensOperand :: Expr t s -> Bool
+needsParensOperand = \case
+    Term t     -> isNegative t
+    App {}     -> False
+    DataCon {} -> False
+    _          -> True
 
 needsParensArg :: Expr t s -> Bool
 needsParensArg = \case

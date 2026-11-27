@@ -5,7 +5,7 @@ module Transform.Hoist ( HExpr (..)
                        , hoist
                        ) where
 
-import Core.Expression          (Pattern, Term (..), patternVars)
+import Core.Expression          (Op, Pattern, Term (..), patternVars)
 import Core.Module              (Fun (..), Module (..))
 import Transform.Class
 import Transform.ClosureConvert (CCExpr (..))
@@ -88,6 +88,10 @@ hExpr e =
             caseOf ty <$> hExpr scrut
                       <*> traverse hAlt alts
 
+        CCBinOp ty op a b ->
+            binOp ty op <$> hExpr a
+                        <*> hExpr b
+
     where
     hAlt (pat, body) =
         (,) pat <$> shadow (patternVars pat) (hExpr body)
@@ -132,15 +136,19 @@ data HExpr t s
     | HLet ![(t, s, HExpr t s)] !(HExpr t s)
     | HDataCon !t !s ![HExpr t s]
     | HCase !t !(HExpr t s) ![(Pattern s, HExpr t s)]
+    | HBinOp !t !Op !(HExpr t s) !(HExpr t s)
         deriving (Eq, Show)
 
-class (App a, Case a, CTerm a, DataCon a, Let a, MkClo a)
+class (App a, BinOp a, Case a, CTerm a, DataCon a, Let a, MkClo a)
     => Hoist a
 
 instance Hoist HExpr
 
 instance App HExpr where
     app = HApp
+
+instance BinOp HExpr where
+    binOp = HBinOp
 
 instance Case HExpr where
     caseOf = HCase

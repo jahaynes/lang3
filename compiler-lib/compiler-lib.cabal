@@ -41,7 +41,8 @@ test-suite compiler-lib-test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Test.hs
-    other-modules:    Transform.AnfTest
+    other-modules:    Parse.ExpressionTest
+                      Transform.AnfTest
                       Transform.ClosureConvertTest
                       Transform.HoistTest
     build-depends:

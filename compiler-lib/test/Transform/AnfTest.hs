@@ -164,6 +164,36 @@ tests = testGroup "Anf"
                        nlet "a" (capp (var "g") [int 1]) (capp (var "f") [var "a"])) ])
             ]
 
+    , testCase "binop of atoms is unchanged" $
+        normsExprTo
+            (BinOp () Plus (eVar "x") (Term (LitInt 1)))
+            [ fun "main" [] [] (cbinOp Plus (var "x") (int 1)) ]
+
+    , testCase "binop operands are let-bound left to right" $
+        normsExprTo
+            (BinOp () Times (App () (eVar "f") [eVar "a"]) (App () (eVar "g") [eVar "b"]))
+            [ fun "main" [] []
+                (nlet "anf_0" (capp (var "f") [var "a"])
+                    (nlet "anf_1" (capp (var "g") [var "b"])
+                        (cbinOp Times (var "anf_0") (var "anf_1"))))
+            ]
+
+    , testCase "nested binop is let-bound" $
+        normsExprTo
+            (App () (eVar "f") [BinOp () Plus (eVar "x") (BinOp () Times (eVar "y") (eVar "z"))])
+            [ fun "main" [] []
+                (nlet "anf_0" (cbinOp Times (var "y") (var "z"))
+                    (nlet "anf_1" (cbinOp Plus (var "x") (var "anf_0"))
+                        (capp (var "f") [var "anf_1"])))
+            ]
+
+    , testCase "binop operand inside a lambda is captured" $
+        normsExprTo
+            (Lam () ["x"] (Lam () ["y"] (BinOp () Plus (eVar "x") (eVar "y"))))
+            [ fun "ll_0" ["x"] ["y"] (cbinOp Plus (var "x") (var "y"))
+            , fun "main" []    ["x"] (cmkClo ["x"] "ll_0")
+            ]
+
     , testCase "pattern variable that shadows a parameter is renamed" $
         normsExprTo
             (Lam () ["x"] (Case () (eVar "x")
@@ -246,6 +276,9 @@ capp f = CExpr . CApp () f
 
 cmkClo :: [ByteString] -> ByteString -> NExpr () ByteString
 cmkClo env = CExpr . CMkClo () (S.fromList env)
+
+cbinOp :: Op -> Term () ByteString -> Term () ByteString -> NExpr () ByteString
+cbinOp op a = CExpr . CBinOp () op a
 
 cdataCon :: ByteString -> [Term () ByteString] -> NExpr () ByteString
 cdataCon c = CExpr . CDataCon () c

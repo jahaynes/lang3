@@ -1,4 +1,5 @@
 module Transform.Class ( App (..)
+                       , BinOp (..)
                        , Case (..)
                        , Closure (..)
                        , CTerm (..)
@@ -7,12 +8,15 @@ module Transform.Class ( App (..)
                        , MkClo (..)
                        ) where
 
-import Core.Expression (Pattern, Term)
+import Core.Expression (Op, Pattern, Term)
 
 import Data.Set (Set)
 
 class App a where
     app :: t -> a t s -> [a t s] -> a t s
+
+class BinOp a where
+    binOp :: t -> Op -> a t s -> a t s -> a t s
 
 class Case a where
     caseOf :: t -> a t s -> [(Pattern s, a t s)] -> a t s

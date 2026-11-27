@@ -1,4 +1,5 @@
 module Core.Expression ( Expr (..)
+                       , Op (..)
                        , Pattern (..)
                        , Term (..)
                        , patternVars
@@ -11,7 +12,11 @@ data Expr t s
     | Let ![(t, s, Expr t s)] !(Expr t s)
     | DataCon !t !s ![Expr t s]
     | Case !t !(Expr t s) ![(Pattern s, Expr t s)]
+    | BinOp !t !Op !(Expr t s) !(Expr t s)
         deriving (Eq, Show)
+
+data Op = Plus | Times | Equals | And | Or
+    deriving (Eq, Ord, Show)
 
 data Term t s
     = Var !t !s

@@ -11,7 +11,77 @@ import           Data.Functor ((<&>))
 import           Data.Vector           ((!?))
 
 parseExpr :: Parser ParseState (Expr () ByteString)
-parseExpr = parseApply
+parseExpr = parseBoolOr
+
+parseBoolOr :: Parser ParseState (Expr () ByteString)
+parseBoolOr = do
+    x  <- parseBoolAnd
+    ys <- many $ do op <- boolOr
+                    y  <- parseBoolAnd
+                    pure (op, y)
+    pure $ foldl' (\e (o, y) -> BinOp () o e y) x ys
+
+    where
+    boolOr :: Parser ParseState Op
+    boolOr = parseSatisfy "boolOr" $ \case
+                 TOr -> Just Or
+                 _   -> Nothing
+
+parseBoolAnd :: Parser ParseState (Expr () ByteString)
+parseBoolAnd = do
+    x  <- parseComp
+    ys <- many $ do op <- boolAnd
+                    y  <- parseComp
+                    pure (op, y)
+    pure $ foldl' (\e (o, y) -> BinOp () o e y) x ys
+
+    where
+    boolAnd :: Parser ParseState Op
+    boolAnd = parseSatisfy "boolAnd" $ \case
+                  TAnd -> Just And
+                  _    -> Nothing
+
+parseComp :: Parser ParseState (Expr () ByteString)
+parseComp = sumExpr <|> parseSum
+    where
+    sumExpr = do
+        x <- parseSum
+        o <- compOp
+        y <- parseComp
+        pure $ BinOp () o x y
+
+    compOp :: Parser ParseState Op
+    compOp = parseSatisfy "compOp" $ \case
+                 TEqEq -> Just Equals
+                 _     -> Nothing
+
+parseSum :: Parser ParseState (Expr () ByteString)
+parseSum = do
+    x  <- parseProduct
+    ys <- many $ do op <- sumOp
+                    y  <- parseProduct
+                    pure (op, y)
+    pure $ foldl' (\e (o, y) -> BinOp () o e y) x ys
+
+    where
+    sumOp :: Parser ParseState Op
+    sumOp = parseSatisfy "sumOp" $ \case
+                TPlus -> Just Plus
+                _     -> Nothing
+
+parseProduct :: Parser ParseState (Expr () ByteString)
+parseProduct = do
+    x  <- parseApply
+    ys <- many $ do op <- mulOp
+                    y  <- parseApply
+                    pure (op, y)
+    pure $ foldl' (\e (o, y) -> BinOp () o e y) x ys
+
+    where
+    mulOp :: Parser ParseState Op
+    mulOp = parseSatisfy "mulOp" $ \case
+                TMul -> Just Times
+                _    -> Nothing
 
 parseApply :: Parser ParseState (Expr () ByteString)
 parseApply = parseApp

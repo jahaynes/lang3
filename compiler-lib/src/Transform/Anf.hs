@@ -5,7 +5,7 @@ module Transform.Anf ( CExpr (..)
                      , anf
                      ) where
 
-import Core.Expression (Pattern (..), Term (..), patternVars)
+import Core.Expression (Op, Pattern (..), Term (..), patternVars)
 import Transform.Hoist (HExpr (..), HFun (..), HModule (..))
 
 import           Control.Monad.Trans.RWS.Strict (RWST, ask, asks, evalRWST, get, gets, local, modify, put)
@@ -35,6 +35,7 @@ data CExpr t s
     | CMkClo !t !(Set s) !s
     | CDataCon !t !s ![Term t s]
     | CCase !t !(Term t s) ![(Pattern s, NExpr t s)]
+    | CBinOp !t !Op !(Term t s) !(Term t s)
         deriving (Eq, Show)
 
 data NState s =
@@ -97,6 +98,11 @@ asAnfExpr expr k =
             asAtomicExpr scrut $ \scrut' -> do
                 alts' <- traverse nAlt alts
                 k (Complex $ CCase ty scrut' alts')
+
+        HBinOp ty op a b ->
+            asAtomicExpr a $ \a' ->
+                asAtomicExpr b $ \b' ->
+                    k (Complex $ CBinOp ty op a' b')
 
 nAlt :: (Monad m, Ord s, IsString s)
      => (Pattern s, HExpr t s)
@@ -200,6 +206,7 @@ cType = \case
     CMkClo t _ _   -> t
     CDataCon t _ _ -> t
     CCase t _ _    -> t
+    CBinOp t _ _ _ -> t
 
 mentionedIn :: Ord s => s -> HExpr t s -> Bool
 mentionedIn a = go
@@ -214,3 +221,4 @@ mentionedIn a = go
                         && (any (\(_, _, b) -> go b) bs || go body)
         HDataCon _ _ xs -> any go xs
         HCase _ s alts  -> go s || any (\(p, b) -> a `notElem` patternVars p && go b) alts
+        HBinOp _ _ x y  -> go x || go y

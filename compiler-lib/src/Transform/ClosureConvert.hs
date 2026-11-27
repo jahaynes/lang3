@@ -2,7 +2,7 @@ module Transform.ClosureConvert ( CCExpr (..)
                                 , closureConvert
                                 ) where
 
-import Core.Expression (Expr (..), Pattern, Term (..), patternVars)
+import Core.Expression (Expr (..), Op, Pattern, Term (..), patternVars)
 import Core.Module     (Fun (..), Module (..))
 import Transform.Class
 
@@ -28,6 +28,7 @@ data CCExpr t s
     | CCLet ![(t, s, CCExpr t s)] !(CCExpr t s)
     | CCDataCon !t !s ![CCExpr t s]
     | CCCase !t !(CCExpr t s) ![(Pattern s, CCExpr t s)]
+    | CCBinOp !t !Op !(CCExpr t s) !(CCExpr t s)
         deriving (Eq, Show)
 
 closureConvert :: (ClosureConvert a, Monad m, Ord s)
@@ -85,6 +86,10 @@ ccExpr (FVExpr fvs expr) =
             caseOf ty <$> ccExpr scrut
                       <*> traverse ccAlt alts
 
+        FVBinOp ty op a b ->
+            binOp ty op <$> ccExpr a
+                        <*> ccExpr b
+
     where
     ccAlt (pat, body) =
         (,) pat <$> binding Local (patternVars pat) (ccExpr body)
@@ -126,6 +131,7 @@ data FVNode t s
     | FVLet ![(t, s, FVExpr t s)] !(FVExpr t s)
     | FVDataCon !t !s ![FVExpr t s]
     | FVCase !t !(FVExpr t s) ![(Pattern s, FVExpr t s)]
+    | FVBinOp !t !Op !(FVExpr t s) !(FVExpr t s)
 
 annotate :: Ord s => Expr t s -> FVExpr t s
 annotate = \case
@@ -164,17 +170,26 @@ annotate = \case
                                   | (p, b) <- alts' ]))
                   (FVCase ty scrut' alts')
 
+    BinOp ty op a b ->
+        let a' = annotate a
+            b' = annotate b
+        in FVExpr (freeVars a' <> freeVars b')
+                  (FVBinOp ty op a' b')
+
     where
     termVars (Var _ s) = S.singleton s
     termVars _         = S.empty
 
-class (App a, Case a, Closure a, CTerm a, DataCon a, Let a)
+class (App a, BinOp a, Case a, Closure a, CTerm a, DataCon a, Let a)
     => ClosureConvert a
 
 instance ClosureConvert CCExpr
 
 instance App CCExpr where
     app = CCApp
+
+instance BinOp CCExpr where
+    binOp = CCBinOp
 
 instance Case CCExpr where
     caseOf = CCCase
