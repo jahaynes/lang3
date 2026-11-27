@@ -8,6 +8,7 @@ module TypeSystem.Common ( GroupState (..)
                          , numToVar
                          , substituteType
                          , termType
+                         , traverseExprType
                          , typeOf
                          ) where
 
@@ -16,6 +17,7 @@ import TypeSystem.Types
 
 import           Control.Monad.Trans.State.Strict (StateT, get, put)
 import           Data.Char                        (chr)
+import           Data.Functor.Identity            (Identity (..))
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict as M
 import           Data.String                      (IsString, fromString)
@@ -71,22 +73,26 @@ termType = \case
     LitString _ -> typeString
 
 mapExprType :: (t -> u) -> Expr t s -> Expr u s
-mapExprType f = go
+mapExprType f = runIdentity . traverseExprType (Identity . f)
+
+traverseExprType :: Applicative f => (t -> f u) -> Expr t s -> f (Expr u s)
+traverseExprType f = go
     where
     go = \case
-        Term t            -> Term (goTerm t)
-        App t g xs        -> App (f t) (go g) (map go xs)
-        Lam t vs body     -> Lam (f t) vs (go body)
-        Let bs body       -> Let [ (f t, n, go e) | (t, n, e) <- bs ] (go body)
-        DataCon t c xs    -> DataCon (f t) c (map go xs)
-        Case t scrut alts -> Case (f t) (go scrut) [ (p, go e) | (p, e) <- alts ]
-        BinOp t op a b    -> BinOp (f t) op (go a) (go b)
+        Term t            -> Term <$> goTerm t
+        App t g xs        -> App <$> f t <*> go g <*> traverse go xs
+        Lam t vs body     -> Lam <$> f t <*> pure vs <*> go body
+        Let bs body       -> Let <$> traverse (\(t, n, e) -> (,,) <$> f t <*> pure n <*> go e) bs
+                                 <*> go body
+        DataCon t c xs    -> DataCon <$> f t <*> pure c <*> traverse go xs
+        Case t scrut alts -> Case <$> f t <*> go scrut <*> traverse (\(p, e) -> (,) p <$> go e) alts
+        BinOp t op a b    -> BinOp <$> f t <*> pure op <*> go a <*> go b
 
     goTerm = \case
-        Var t x     -> Var (f t) x
-        LitInt n    -> LitInt n
-        LitBool b   -> LitBool b
-        LitString s -> LitString s
+        Var t x     -> (`Var` x) <$> f t
+        LitInt n    -> pure (LitInt n)
+        LitBool b   -> pure (LitBool b)
+        LitString s -> pure (LitString s)
 
 exprTypes :: Expr t s -> [t]
 exprTypes = \case

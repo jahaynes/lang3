@@ -33,6 +33,7 @@ library
                       Transform.Anf
                       Transform.ClosureConvert
                       Transform.Hoist
+                      Transform.Monomorphise
                       TypeSystem.CallGraph
                       TypeSystem.Common
                       TypeSystem.ConstraintSolver
@@ -53,6 +54,7 @@ test-suite compiler-lib-test
                       Transform.AnfTest
                       Transform.ClosureConvertTest
                       Transform.HoistTest
+                      Transform.MonomorphiseTest
                       TypeSystem.InferTest
     build-depends:
         compiler-lib,

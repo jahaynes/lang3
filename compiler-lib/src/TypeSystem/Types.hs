@@ -2,6 +2,7 @@
 
 module TypeSystem.Types ( DataDefn (..)
                         , DCon (..)
+                        , MType (..)
                         , Polytype (..)
                         , Type (..)
                         , arity
@@ -47,6 +48,19 @@ instance Show s => Show (Type s) where
     show (TyCon c) = show c
     show (TyArr ps r) = "(" ++ showParams (map show ps) ++ " -> " ++ show r ++ ")"
     show (TyApp t1 t2) = "(" ++ show t1 ++ " " ++ show t2 ++ ")"
+
+-- | A monomorphisation-time type: the same shape as 'Type', minus 'TyVar' --
+-- by construction, an 'MType' cannot mention a type variable, so it can only
+-- be built by fully resolving one (see 'Transform.Monomorphise').
+data MType s = MTyCon s
+             | MTyArr ![MType s] !(MType s)
+             | MTyApp !(MType s) !(MType s)
+                deriving (Eq, Ord, Functor)
+
+instance Show s => Show (MType s) where
+    show (MTyCon c) = show c
+    show (MTyArr ps r) = "(" ++ showParams (map show ps) ++ " -> " ++ show r ++ ")"
+    show (MTyApp t1 t2) = "(" ++ show t1 ++ " " ++ show t2 ++ ")"
 
 showParams :: [String] -> String
 showParams [p] = p
