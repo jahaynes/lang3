@@ -29,10 +29,10 @@ buildExpr toBS e = evalState (go e) 0
         Lam _ xs body ->
             cat [str "\\", names xs, str " -> ", go body]
 
-        Let bs e -> do
+        Let bs body -> do
             c <- get
             cat [ str "let ", sepBy (newline (c + 4)) (map binding bs)
-                , newline c, str "in ", go e ]
+                , newline c, str "in ", go body ]
 
         DataCon _ c xs ->
             cat $ str (toBS c) : map arg xs
