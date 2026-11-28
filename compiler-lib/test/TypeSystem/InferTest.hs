@@ -134,7 +134,7 @@ tests = testGroup "Infer"
                 [ ("main", "Int"), ("inc", "Int -> Int") ]
 
     , testCase "pipeline runs on a typed module" $
-        case compile [] =<< parseModule [("id", "\\x. x"), ("main", "id 1")] of
+        case compile =<< parseModule [("id", "\\x. x"), ("main", "id 1")] of
             Left err -> assertFailure (C8.unpack err)
             Right _  -> pure ()
     ]
@@ -145,7 +145,7 @@ listDefn = DataDefn "List" ["a"]
     , DCon "Cons" [TyVar "a", TyApp (TyCon "List") (TyVar "a")] ]
 
 parseModule :: [(ByteString, ByteString)] -> Either ByteString (Module (Expr () ByteString) ByteString)
-parseModule defs = Module <$> traverse (\(n, src) -> Fun n <$> runUntypedExpr src) defs
+parseModule defs = Module [] [] <$> traverse (\(n, src) -> Fun n <$> runUntypedExpr src) defs
 
 typesTo :: [(ByteString, ByteString)] -> [(ByteString, String)] -> Assertion
 typesTo defs expected =
@@ -155,13 +155,13 @@ typesTo defs expected =
 
 typesModuleTo :: [DataDefn ByteString] -> [(ByteString, Expr () ByteString)] -> [(ByteString, String)] -> Assertion
 typesModuleTo dataDefns defs expected =
-    case inferModule dataDefns (Module [ Fun n e | (n, e) <- defs ]) of
+    case inferModule (Module dataDefns [] [ Fun n e | (n, e) <- defs ]) of
         Left err -> assertFailure $ "type error: " <> C8.unpack err
         Right md -> [ (n, renderType (typeOf e)) | Fun n e <- getFunDefns md ] @?= expected
 
 annotatesTo :: [(ByteString, ByteString)] -> ByteString -> Expr (Type ByteString) ByteString -> Assertion
 annotatesTo defs name expected =
-    case inferModule [] =<< parseModule defs of
+    case inferModule =<< parseModule defs of
         Left err -> assertFailure (C8.unpack err)
         Right md -> lookup name [ (n, e) | Fun n e <- getFunDefns md ] @?= Just expected
 
@@ -173,7 +173,7 @@ failsWith defs msg =
 
 failsModuleWith :: [DataDefn ByteString] -> [(ByteString, Expr () ByteString)] -> String -> Assertion
 failsModuleWith dataDefns defs msg =
-    case inferModule dataDefns (Module [ Fun n e | (n, e) <- defs ]) of
+    case inferModule (Module dataDefns [] [ Fun n e | (n, e) <- defs ]) of
         Left err | msg `isInfixOf` C8.unpack err -> pure ()
                  | otherwise -> assertFailure $ "wrong error: " <> C8.unpack err
         Right md -> assertFailure $ "expected a type error, got: "

@@ -42,7 +42,7 @@ closureConvert md = do
 
     funDefs' <- runReaderT (traverse ccFun funDefs) scope
 
-    pure Module { getFunDefns = funDefs' }
+    pure md { getFunDefns = funDefs' }
 
 ccFun :: (ClosureConvert a, Monad m, Ord s)
       => Fun (Expr t s) s

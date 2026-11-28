@@ -1,4 +1,8 @@
 module Parse.Expression ( parseExpr
+                        , parseLowerStart
+                        , parseSatisfy
+                        , parseUpperStart
+                        , token
                         ) where
 
 import Core.Expression
@@ -167,6 +171,12 @@ parseLowerStart :: Parser ParseState ByteString
 parseLowerStart = parseSatisfy "lowerStart" f
     where
     f (TLowerStart x) = Just x
+    f               _ = Nothing
+
+parseUpperStart :: Parser ParseState ByteString
+parseUpperStart = parseSatisfy "upperStart" f
+    where
+    f (TUpperStart x) = Just x
     f               _ = Nothing
 
 parseSatisfy :: ByteString

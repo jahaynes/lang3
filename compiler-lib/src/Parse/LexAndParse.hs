@@ -1,17 +1,23 @@
-module Parse.LexAndParse ( runUntypedExpr
+module Parse.LexAndParse ( lexAndParseWith
+                         , runModule
+                         , runUntypedExpr
                          ) where
 
 import Core.Expression
+import Core.Module
 import Parse.Expression
 import Parse.Lex
+import Parse.Module
 import Parse.Parser
 import Parse.Token
 
 import           Data.ByteString             (ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as C8
 import           Data.IntSet                 (IntSet)
 import qualified Data.IntSet as IS
 import           Data.Vector                 (Vector)
+import qualified Data.Vector as V
 import           Data.Word                   (Word8)
 
 runUntypedExpr :: ByteString -> Either ByteString (Expr () ByteString)
@@ -19,6 +25,15 @@ runUntypedExpr input = do
     (_tokens, eExpr)    <- lexAndParseWith parseExpr input
     (_parseState, expr) <- eExpr
     pure expr
+
+runModule :: ByteString -> Either ByteString (Module (Expr () ByteString) ByteString)
+runModule input = do
+    (tokens, eModule) <- lexAndParseWith parseDefns input
+    (parseState, md)  <- eModule
+    if ps_pos parseState == length tokens
+        then pure md
+        else Left $ "Unparsed input from token " <> C8.pack (show (ps_pos parseState))
+                 <> ": " <> C8.pack (show (tokens V.! ps_pos parseState))
 
 lexAndParseWith :: Parser ParseState a
                 -> ByteString

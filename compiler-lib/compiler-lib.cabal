@@ -24,6 +24,7 @@ library
                       Parse.Expression
                       Parse.Lex
                       Parse.LexAndParse
+                      Parse.Module
                       Parse.Parser
                       Parse.Token
                       Pipeline
@@ -52,6 +53,7 @@ test-suite compiler-lib-test
     hs-source-dirs:   test
     main-is:          Test.hs
     other-modules:    Parse.ExpressionTest
+                      Parse.ModuleTest
                       Transform.AnfTest
                       Transform.ClosureConvertTest
                       Transform.EtaSaturateTest

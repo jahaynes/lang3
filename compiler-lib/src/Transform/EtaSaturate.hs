@@ -58,7 +58,7 @@ etaSaturate md = do
 
     fs' <- evalStateT (runReaderT (traverse eFun fs) nullaryTops) 0
 
-    pure Module { getFunDefns = fs' }
+    pure md { getFunDefns = fs' }
 
     where
     fs = getFunDefns md

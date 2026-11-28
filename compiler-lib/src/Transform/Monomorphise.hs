@@ -52,7 +52,7 @@ monomorphise md = do
 
     (emitted, extras) <- evalRWST (traverse emitUnderOwnName initial) funMap mempty
 
-    pure Module { getFunDefns = emitted ++ toList extras }
+    pure md { getFunDefns = emitted ++ toList extras }
 
     where
     emitUnderOwnName (Fun n e) = do

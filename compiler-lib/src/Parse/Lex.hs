@@ -4,11 +4,11 @@ module Parse.Lex ( runLexer
 import Parse.Parser
 import Parse.Token
 
-import           Data.ByteString       (ByteString)
+import           Data.ByteString             (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
-import           Data.Char                   (isAlphaNum, isDigit, isLower, isSpace)
-import           Data.Vector           (Vector)
+import           Data.Char                   (isAlphaNum, isDigit, isLower, isSpace, isUpper)
+import           Data.Vector                 (Vector)
 import qualified Data.Vector as V
 
 data LexState =
@@ -43,6 +43,7 @@ parseToken = keyword
          <|> litInt
          <|> (TLitString <$> litString)
          <|> variable
+         <|> constructor
 
     where
     keyword :: Parser LexState Token
@@ -86,6 +87,9 @@ parseToken = keyword
 
     variable :: Parser LexState Token
     variable = TLowerStart <$> lowerStart
+
+    constructor :: Parser LexState Token
+    constructor = TUpperStart <$> upperStart
 
     {- keyword
          <|> operator
@@ -241,6 +245,9 @@ litString = Parser f
 
 lowerStart :: Parser LexState ByteString
 lowerStart = alphaNumStartWith isLower
+
+upperStart :: Parser LexState ByteString
+upperStart = alphaNumStartWith isUpper
 
 integer :: Parser LexState Integer
 integer = read . C8.unpack <$> digits

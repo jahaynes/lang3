@@ -122,7 +122,7 @@ convertsTo globals src expected =
 convertsExprTo :: [ByteString] -> Expr () ByteString -> CCExpr () ByteString -> Assertion
 convertsExprTo globals parsed expected = do
     let others       = [Fun g (Term (LitInt 0)) | g <- globals]
-        Identity md' = closureConvert (Module (Fun "main" parsed : others))
+        Identity md' = closureConvert (Module [] [] (Fun "main" parsed : others))
     case getFunDefns md' of
         Fun _ actual : _ -> actual @?= expected
         []               -> assertFailure "no functions in output"

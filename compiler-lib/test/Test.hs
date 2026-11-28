@@ -1,6 +1,7 @@
 module Main (main) where
 
 import qualified Parse.ExpressionTest
+import qualified Parse.ModuleTest
 import qualified Transform.AnfTest
 import qualified Transform.ClosureConvertTest
 import qualified Transform.EtaSaturateTest
@@ -13,6 +14,7 @@ import Test.Tasty (defaultMain, testGroup)
 main :: IO ()
 main = defaultMain $ testGroup "compiler-lib"
     [ Parse.ExpressionTest.tests
+    , Parse.ModuleTest.tests
     , TypeSystem.InferTest.tests
     , Transform.MonomorphiseTest.tests
     , Transform.EtaSaturateTest.tests

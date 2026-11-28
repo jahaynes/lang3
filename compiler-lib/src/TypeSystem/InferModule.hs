@@ -29,12 +29,13 @@ import           Data.String.Interpolate          (iii)
 --
 -- Functions are inferred in dependency order, one binding group (a set of
 -- mutually recursive functions) at a time: see 'createPlan'.
-inferModule :: (IsString s, Ord s, Show s) => [DataDefn s]
-            -> Module (Expr () s) s
+inferModule :: (IsString s, Ord s, Show s)
+            => Module (Expr () s) s
             -> Either s (Module (Expr (Type s) s) s)
-inferModule dataDefns md = do
+inferModule md = do
 
-    let funDefns = getFunDefns md
+    let dataDefns = getDataDefns md
+        funDefns  = getFunDefns md
         untyped  = M.fromList [ (n, e) | Fun n e <- funDefns ]
 
     checkDuplicates $ [ n | Fun n _ <- funDefns ]
@@ -50,7 +51,7 @@ inferModule dataDefns md = do
 
     (_, typed) <- evalStateT (foldM step (ctorEnv, mempty) plan) (GroupState 0)
 
-    pure Module { getFunDefns = [ Fun n (typed M.! n) | Fun n _ <- funDefns ] }
+    pure md { getFunDefns = [ Fun n (typed M.! n) | Fun n _ <- funDefns ] }
 
 -- | Top-level functions and data constructors share one namespace.
 checkDuplicates :: (IsString s, Ord s, Show s) => [s] -> Either s ()

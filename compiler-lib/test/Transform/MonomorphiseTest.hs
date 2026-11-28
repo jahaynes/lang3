@@ -62,10 +62,10 @@ tests = testGroup "Monomorphise"
     ]
 
 parseModule :: [(ByteString, ByteString)] -> Either ByteString (Module (Expr () ByteString) ByteString)
-parseModule defs = Module <$> traverse (\(n, src) -> Fun n <$> runUntypedExpr src) defs
+parseModule defs = Module [] [] <$> traverse (\(n, src) -> Fun n <$> runUntypedExpr src) defs
 
 runMono :: [(ByteString, ByteString)] -> Either ByteString (Module (Expr (MType ByteString) ByteString) ByteString)
-runMono defs = monomorphise =<< inferModule [] =<< parseModule defs
+runMono defs = monomorphise =<< inferModule =<< parseModule defs
 
 monosTo :: [(ByteString, ByteString)] -> [(ByteString, String)] -> Assertion
 monosTo defs expected =

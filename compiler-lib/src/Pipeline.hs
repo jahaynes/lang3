@@ -9,15 +9,15 @@ import Transform.EtaSaturate    (etaSaturate)
 import Transform.Hoist          (hoist)
 import Transform.Monomorphise   (monomorphise)
 import TypeSystem.InferModule   (inferModule)
-import TypeSystem.Types         (DataDefn, MType)
+import TypeSystem.Types         (MType)
 
 import Data.String (IsString)
 
-compile :: (IsString s, Ord s, Show s) => [DataDefn s]
-        -> Module (Expr () s) s
+compile :: (IsString s, Ord s, Show s)
+        => Module (Expr () s) s
         -> Either s (NModule (MType s) s)
-compile dataDefns md = do
-    typed   <- inferModule dataDefns md
+compile md = do
+    typed   <- inferModule md
     mono    <- monomorphise typed
     sat     <- etaSaturate mono
     cc      <- closureConvert sat

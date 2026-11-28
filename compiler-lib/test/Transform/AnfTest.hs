@@ -251,7 +251,7 @@ normsExprTo e = normsParsedTo [Fun "main" e]
 
 normsParsedTo :: [Fun (Expr () ByteString) ByteString] -> [NFun () ByteString] -> Assertion
 normsParsedTo parsed expected = do
-    let Identity cc               = closureConvert (Module parsed) :: Identity (Module (CCExpr () ByteString) ByteString)
+    let Identity cc               = closureConvert (Module [] [] parsed) :: Identity (Module (CCExpr () ByteString) ByteString)
         Identity hoisted          = hoist cc
         Identity (NModule actual) = anf hoisted
     actual @?= expected

@@ -181,7 +181,7 @@ hoistsExprTo e = hoistsParsedTo [Fun "main" e]
 
 hoistsParsedTo :: [Fun (Expr () ByteString) ByteString] -> [HFun () ByteString] -> Assertion
 hoistsParsedTo parsed expected = do
-    let Identity cc               = closureConvert (Module parsed) :: Identity (Module (CCExpr () ByteString) ByteString)
+    let Identity cc               = closureConvert (Module [] [] parsed) :: Identity (Module (CCExpr () ByteString) ByteString)
         Identity (HModule actual) = hoist cc
     actual @?= expected
 

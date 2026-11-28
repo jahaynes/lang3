@@ -73,11 +73,11 @@ tests = testGroup "EtaSaturate"
     ]
 
 parseModule :: [(ByteString, ByteString)] -> Either ByteString (Module (Expr () ByteString) ByteString)
-parseModule defs = Module <$> traverse (\(n, src) -> Fun n <$> runUntypedExpr src) defs
+parseModule defs = Module [] [] <$> traverse (\(n, src) -> Fun n <$> runUntypedExpr src) defs
 
 saturatesTo :: [(ByteString, ByteString)] -> ByteString -> String -> Assertion
 saturatesTo defs name expected =
-    case etaSaturate =<< monomorphise =<< inferModule [] =<< parseModule defs of
+    case etaSaturate =<< monomorphise =<< inferModule =<< parseModule defs of
         Left err -> assertFailure (C8.unpack err)
         Right md -> lookup name [ (unSpec n, shape e) | Fun n e <- getFunDefns md ] @?= Just expected
 
